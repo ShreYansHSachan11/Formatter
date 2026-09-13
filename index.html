@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exam Paper Formatter</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">SS</span>
+    <div>
+      <h1>Exam Paper Formatter</h1>
+      <p id="statusLine" class="status">Load a paper to begin</p>
+    </div>
+  </div>
+  <div class="actions">
+    <button id="copyBtn" class="btn" disabled>Copy text</button>
+    <button id="downloadBtn" class="btn btn-primary" disabled>Download Word file</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="panel">
+
+    <section class="card">
+      <h2>1. Paper</h2>
+      <div id="dropZone" class="drop">
+        <p><strong>Drop a Word file here</strong></p>
+        <p class="muted">or</p>
+        <button id="browseBtn" class="btn btn-soft">Choose .docx or .txt</button>
+        <input id="fileInput" type="file" accept=".docx,.txt,.text" hidden>
+      </div>
+      <details id="pasteBox">
+        <summary>Or paste the paper as text</summary>
+        <textarea id="pasteArea" rows="8" spellcheck="false"
+          placeholder="Paste the question paper here..."></textarea>
+        <button id="pasteBtn" class="btn btn-soft">Format this text</button>
+      </details>
+      <p class="muted small">
+        Try a sample:
+        <button class="link" data-sample="english">Class 2 English</button> ·
+        <button class="link" data-sample="hindi">Class 5 Hindi</button>
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>2. Header</h2>
+      <div class="grid">
+        <label>Subject<input id="hdrSubject" type="text" placeholder="English"></label>
+        <label>Class<input id="hdrClass" type="text" placeholder="5th"></label>
+        <label>Time<input id="hdrTime" type="text" placeholder="2:30 hrs"></label>
+        <label>Max marks<input id="hdrMarks" type="text" placeholder="50"></label>
+      </div>
+      <label class="wide">School<input id="hdrSchool" type="text" placeholder="S.S. ACADEMY KOIRAUNA BHADOHI"></label>
+      <label class="wide">Examination<input id="hdrExam" type="text" placeholder="Half Yearly Examination 2026-27"></label>
+    </section>
+
+    <section class="card">
+      <h2>3. Layout</h2>
+      <div class="grid">
+        <label>Fit within
+          <select id="optPages">
+            <option value="2" selected>2 pages</option>
+            <option value="1">1 page</option>
+            <option value="3">3 pages</option>
+            <option value="99">No limit</option>
+          </select>
+        </label>
+        <label>Spacing
+          <select id="optDensity"><option value="auto" selected>Auto</option></select>
+        </label>
+        <label>English font
+          <select id="optLatinFont">
+            <option>Arial</option>
+            <option>Times New Roman</option>
+            <option>Calibri</option>
+            <option>Cambria</option>
+            <option>Verdana</option>
+          </select>
+        </label>
+        <label>Hindi font
+          <select id="optHindiFont">
+            <option>Nirmala UI</option>
+            <option>Mangal</option>
+            <option>Kokila</option>
+            <option>Utsaah</option>
+          </select>
+        </label>
+        <label>Font size
+          <select id="optFontSize">
+            <option value="12" selected>12 pt</option>
+            <option value="11">11 pt</option>
+            <option value="13">13 pt</option>
+            <option value="14">14 pt</option>
+          </select>
+        </label>
+        <label>Question label
+          <select id="optPrefix">
+            <option value="auto" selected>Match language</option>
+            <option value="Que">Que</option>
+            <option value="Q.">Q.</option>
+            <option value="Question">Question</option>
+            <option value="&#2346;&#2381;&#2352;&#2358;&#2381;&#2344;">&#2346;&#2381;&#2352;&#2358;&#2381;&#2344;</option>
+          </select>
+        </label>
+      </div>
+      <label class="check">
+        <input id="optNoGap" type="checkbox">
+        No gap between questions
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>4. Language check</h2>
+      <p id="autoFixSummary" class="muted small">Nothing to report yet.</p>
+      <div id="suggestions" class="suggestions"></div>
+      <details id="autoFixDetails" hidden>
+        <summary>Show what was cleaned up automatically</summary>
+        <ul id="autoFixList" class="fixlist"></ul>
+      </details>
+    </section>
+
+  </aside>
+
+  <section class="preview-wrap">
+    <div id="previewNote" class="preview-note"></div>
+    <div id="previewScale" class="preview-scale">
+      <div id="preview" class="preview"></div>
+    </div>
+    <div id="emptyState" class="empty">
+      <p>The formatted paper will appear here.</p>
+      <p class="muted small">Everything runs on this computer - no file is uploaded anywhere.</p>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/docx.iife.js"></script>
+<script src="src/text-utils.js"></script>
+<script src="src/rules-language.js"></script>
+<script src="src/normalize.js"></script>
+<script src="src/parser.js"></script>
+<script src="src/compose.js"></script>
+<script src="src/layout.js"></script>
+<script src="src/render-docx.js"></script>
+<script src="src/render-text.js"></script>
+<script src="src/render-preview.js"></script>
+<script src="src/read-docx.js"></script>
+<script src="src/samples.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

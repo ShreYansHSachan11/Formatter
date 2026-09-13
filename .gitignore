@@ -1,0 +1,5 @@
+# Test-only dependencies; the app itself needs no install.
+node_modules/
+
+# Generated sample documents (rebuild with: npm run build-samples)
+out/
