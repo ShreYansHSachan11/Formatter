@@ -141,6 +141,17 @@ The pipeline is one direction, with a single intermediate representation:
 `blocks` is shared by the Word writer, the text writer, the preview and the
 page-fitting engine, so all four always agree.
 
+## Deploying
+
+It is a static site with no build step, so any static host will do. On Vercel,
+import the repository and pick the **Other** preset; `vercel.json` already sets
+the rest (no build, no install, serve the repository root). Served over https
+the page also gets a working Clipboard API, which a local `file://` copy does
+not.
+
+Nothing is uploaded by the page itself either way: the formatting all happens
+in the browser.
+
 ## Tests
 
     npm install                     # once - an XML parser and a headless browser, for the tests only
