@@ -34,7 +34,7 @@
     var text = blockText(block);
     var height = lineHeightPt(text, density, fontPt);
 
-    if (block.type === 'rule') return fontPt * 0.45 * density.line;
+    if (block.type === 'rule') return fontPt * 0.45 * density.line + (block.spaceBeforePt || 0);
 
     if (block.cells) {
       var rows;

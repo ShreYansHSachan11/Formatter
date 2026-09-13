@@ -106,6 +106,35 @@ function expect(condition, message) {
   if (!condition) failures.push(message);
 }
 
+/*
+ * Word wraps content in more than paragraphs: a content control (w:sdt) can
+ * hold whole questions and a cell can hold another table. Both used to be
+ * dropped on the floor without a trace.
+ */
+var CONTAINERS = '<?xml version="1.0" encoding="UTF-8"?><w:document ' + W + '><w:body>'
+  + plain('PLAIN paragraph')
+  + '<w:sdt><w:sdtPr/><w:sdtContent>' + plain('INSIDE a content control') + '</w:sdtContent></w:sdt>'
+  + '<w:tbl><w:tr><w:tc>' + plain('CELL one') + '</w:tc><w:tc>' + plain('CELL two') + '</w:tc></w:tr>'
+  + '<w:tr><w:tc><w:tbl><w:tr><w:tc>' + plain('NESTED table cell') + '</w:tc></w:tr></w:tbl></w:tc>'
+  + '<w:tc>' + plain('CELL four') + '</w:tc></w:tr></w:tbl>'
+  + plain('LAST paragraph')
+  + '</w:body></w:document>';
+
+function readContainers() {
+  var zip = new JSZip();
+  zip.file('word/document.xml', CONTAINERS);
+  return zip.generateAsync({ type: 'nodebuffer' })
+    .then(function (buffer) { return PF.readDocx.read(buffer); })
+    .then(function (text) {
+      ['PLAIN paragraph', 'INSIDE a content control', 'CELL one', 'CELL two',
+        'NESTED table cell', 'CELL four', 'LAST paragraph'].forEach(function (wanted) {
+        expect(text.indexOf(wanted) >= 0, 'lost from the document: "' + wanted + '"');
+      });
+      // Cells of one row stay on one line, separated by a tab.
+      expect(/CELL one\tCELL two/.test(text), 'table row did not come back as tab-separated columns');
+    });
+}
+
 var zip = new JSZip();
 zip.file('word/document.xml', DOCUMENT);
 zip.file('word/numbering.xml', NUMBERING);
@@ -147,12 +176,16 @@ zip.generateAsync({ type: 'nodebuffer' })
     expect(/^\s*5\. Who chooses salt/m.test(output), 'Q2 item 5 is not numbered in the output');
     expect(/\(a\) Sugar is/.test(output), 'Q6 item a is not lettered in the output');
 
+    return readContainers();
+  })
+  .then(function () {
     if (failures.length) {
       console.error('\nFAILED (' + failures.length + ')');
       failures.forEach(function (message) { console.error('  - ' + message); });
       process.exit(1);
     }
-    console.log('\nNumbering check passed: Word\'s automatic numbering survives.');
+    console.log('\nReader check passed: automatic numbering, content controls and '
+      + 'nested tables all survive.');
   })
   .catch(function (error) {
     console.error('FAILED:', error && error.stack || error);

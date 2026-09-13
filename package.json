@@ -4,11 +4,12 @@
   "private": true,
   "description": "Formats school examination papers into a clean two-page A4 Word document.",
   "scripts": {
-    "test": "node tests/check-integrity.js && node tests/check-header.js && node tests/check-ui.js && node tests/check-numbering.js",
+    "test": "node tests/check-integrity.js && node tests/check-header.js && node tests/check-ui.js && node tests/check-numbering.js && node tests/check-app.js",
     "build-samples": "node tests/build-docx.js tests/fixtures/loose-spacing.txt"
   },
   "devDependencies": {
     "@xmldom/xmldom": "^0.9.8",
+    "jsdom": "^30.0.1",
     "jsdom": "^30.0.1"
   }
 }

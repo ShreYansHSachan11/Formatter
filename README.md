@@ -143,14 +143,15 @@ page-fitting engine, so all four always agree.
 
 ## Tests
 
-    npm install                     # once - a Node XML parser, for the tests only
-    npm test                        # integrity, header, ui and numbering
+    npm install                     # once - an XML parser and a headless browser, for the tests only
+    npm test                        # integrity, header, wiring, reader and the page itself
 
 or individually:
 
     node tests/check-integrity.js   # nothing lost, nothing split, nothing corrupted
     node tests/check-header.js      # the four header lines, however they were typed
-    node tests/check-numbering.js   # Word's automatic numbering survives
+    node tests/check-numbering.js   # .docx reading: numbering, content controls, tables
+    node tests/check-app.js         # drives the real page: load, preview, edit, copy, download
     node tests/check-ui.js          # ids, assets and modules all line up
     node tests/run-pipeline.js      # parse + fit a sample, print the structure
     node tests/run-pipeline.js hindi
@@ -168,6 +169,10 @@ open them in Word to see the result.
 
 - **`.doc`** (the old format) is not supported — open it in Word and save as
   `.docx` first.
+- A `.txt` file is read as UTF-8. Hindi saved in an older encoding will come
+  through as nonsense; save it as UTF-8, or use the `.docx` instead.
+- A header placed in Word's own page-header area (rather than in the body of the
+  document) is not read. Type those four fields in the Header box instead.
 - The Hindi font defaults to **Nirmala UI**, which ships with Windows. If you
   pick a font that is not installed, Word will substitute another one.
 - Page fitting is an estimate, not a Word rendering. It is deliberately

@@ -25,7 +25,9 @@
     '|(?:\\u092A\\u094D\\u0930\\u0936\\u094D\\u0928)\\s*[-\\u2013\\u2014._:]*\\s*(\\d{1,2})' +
     ')\\s*[-\\u2013\\u2014.:\\)]*\\s*(.*)$', 'i');
 
-  var MARKS_RE = /[\(\[]\s*(\d{1,2})\s*[\)\]]\s*[\.\?:]*\s*$/;
+  // Up to three digits: a section can be worth 100. Four would start matching
+  // years, which belong to the paper's title rather than to its marks.
+  var MARKS_RE = /[\(\[]\s*(\d{1,3})\s*[\)\]]\s*[\.\?:]*\s*$/;
   var EMPTY_BOX_RE = /\(\s*\)/g;
   var TF_BOX_RE = /\[\s*\]\s*$/;
   var LABEL_RE = /^\(?\s*([0-9]{1,2}|[A-Za-z]|[अ-ह])\s*[\)\.–—-]+\s*/;
@@ -252,12 +254,6 @@
   function looksSpaced(text) {
     return text.indexOf(PF.normalize.TAB_SEP) === -1;
   }
-
-  var LABEL_SEQUENCES = [
-    '1234567890'.split(''),
-    'abcdefghij'.split(''),
-    'कखगघङ'.split('')
-  ];
 
   function isSequenceStart(label) {
     var lower = String(label || '').toLowerCase();
@@ -610,7 +606,7 @@
     var match = PF.normalize.clean(first).match(MARKS_RE);
     if (!match) return;
     raw.marks = match[1];
-    raw.bodyLines[0] = first.replace(/[\(\[]\s*\d{1,2}\s*[\)\]]\s*[\.\?:]*\s*$/, '').trim();
+    raw.bodyLines[0] = first.replace(MARKS_RE, '').trim(); // the same pattern, not a copy of it
     if (!raw.bodyLines[0]) raw.bodyLines.shift();
   }
 

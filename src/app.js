@@ -261,7 +261,10 @@
   function scalePreview() {
     var pageWidthPx = PF.compose.PAGE.widthIn * PF.renderPreview.PX_PER_IN;
     var available = el.previewScale.parentElement.clientWidth;
-    var scale = Math.min(1, available / pageWidthPx);
+    // A width of zero means the column has not been laid out yet (or is
+    // hidden). Scaling by zero would make the preview vanish, so full size is
+    // the safe assumption until a resize brings a real measurement.
+    var scale = available > 0 ? Math.min(1, available / pageWidthPx) : 1;
     el.previewScale.style.transform = 'scale(' + scale + ')';
     el.previewScale.style.height = (el.preview.scrollHeight * scale) + 'px';
     el.previewScale.style.width = pageWidthPx + 'px';
@@ -369,5 +372,10 @@
     toastTimer = setTimeout(function () { el.toast.hidden = true; }, 2600);
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  // Waiting for DOMContentLoaded only works if this script runs before it
+  // fires. If the page is already parsed - a deferred or late-injected script,
+  // a saved copy of the page - the event has been and gone, and waiting for it
+  // would leave the interface dead.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })(window.PF = window.PF || {});

@@ -129,26 +129,39 @@
   function tableLines(table, formatFor) {
     return childrenByTag(table, 'w:tr').map(function (row) {
       return childrenByTag(row, 'w:tc').map(function (cell) {
-        return childrenByTag(cell, 'w:p').map(function (paragraph) {
-          return paragraphLines(paragraph, formatFor).join(' ');
-        }).join(' ').trim();
+        // A cell holds blocks of its own, including tables nested inside it.
+        return walk(cell, formatFor).join(' ').trim();
       }).join('\t');
     });
   }
 
-  function bodyToLines(body, formatFor) {
-    formatFor = formatFor || function () { return 'd'; };
+  /**
+   * Collects the lines of every block inside `container`, in document order.
+   *
+   * Word wraps content in more than paragraphs and tables: a content control
+   * (w:sdt) can hold whole questions, and a cell can hold another table.
+   * Looking only for w:p and w:tbl at one level silently loses all of it.
+   */
+  function walk(container, formatFor) {
     var lines = [];
-    for (var i = 0; i < body.childNodes.length; i++) {
-      var node = body.childNodes[i];
+    for (var i = 0; i < container.childNodes.length; i++) {
+      var node = container.childNodes[i];
       if (node.nodeType !== 1) continue;
+
       if (node.nodeName === 'w:p') {
         lines = lines.concat(paragraphLines(node, formatFor));
       } else if (node.nodeName === 'w:tbl') {
         lines = lines.concat(tableLines(node, formatFor));
+      } else if (node.nodeName === 'w:sdt') {
+        var content = firstChild(node, 'w:sdtContent');
+        if (content) lines = lines.concat(walk(content, formatFor));
       }
     }
     return lines;
+  }
+
+  function bodyToLines(body, formatFor) {
+    return walk(body, formatFor || function () { return 'd'; });
   }
 
   /* ----------------------------------------------------------------- entry */
