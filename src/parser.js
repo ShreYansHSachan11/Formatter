@@ -243,12 +243,34 @@
   // is a sentence, so the unlabelled case is held to a much shorter line.
   var MAX_BARE_OPTION_CHARS = 25;
   var MAX_BARE_OPTION_WORDS = 4;
-  var TRUE_FALSE_KEYWORDS = /(true\s*(or|and|\/|,)\s*false|false\s*(or|\/)\s*true|सत्य|असत्य)/i;
+
+  /*
+   * Headings that look like a tick-the-option instruction but are not. "Write
+   * true or false" and "Choose the correct word and fill in the blanks" both
+   * match the keywords, and in both every line is an answer to be written
+   * rather than a choice to be ticked, so nothing in them is ever stacked.
+   */
+  var NOT_OPTION_HEADINGS = new RegExp(
+    'true\\s*(or|and|\\/|,)\\s*false|false\\s*(or|\\/)\\s*true'
+    + '|fill in the blank|fill up the blank'
+    + '|\\u0938\\u0924\\u094D\\u092F|\\u0905\\u0938\\u0924\\u094D\\u092F'                               // सत्य / असत्य
+    + '|\\u0930\\u093F\\u0915\\u094D\\u0924\\s*\\u0938\\u094D\\u0925\\u093E\\u0928'                     // रिक्त स्थान
+    + '|\\u0916\\u093E\\u0932\\u0940\\s*\\u0938\\u094D\\u0925\\u093E\\u0928', 'i');                     // खाली स्थान
+
+  // A choice is a few words, not a sentence, and never has a blank in it: a
+  // line with a blank is a line to be written on.
+  var BLANK_IN_LINE_RE = /(_{3,}|\[\s*\])/;
+  var SENTENCE_TAIL_RE = /[?।]\s*$/;
 
   function looksLikeOption(node, bare) {
     if (!node || node.kind !== 'item' || node.box) return false;
     var text = String(node.text || '').replace(TRAILING_BOX_RE, '').trim();
     if (!text) return false;
+    // A line still carrying a separator is two columns, not one choice.
+    if (text.indexOf(PF.normalize.TAB_SEP) >= 0 || text.indexOf(PF.normalize.SPACE_SEP) >= 0) return false;
+    if (BLANK_IN_LINE_RE.test(text)) return false;
+    if (SENTENCE_TAIL_RE.test(text)) return false;
+    if (/\.\s*$/.test(text) && text.split(/\s+/).length > 3) return false;
     if (!bare) return text.length <= MAX_OPTION_CHARS;
     return text.length <= MAX_BARE_OPTION_CHARS && text.split(/\s+/).length <= MAX_BARE_OPTION_WORDS;
   }
@@ -309,9 +331,10 @@
   }
 
   function groupStackedOptions(nodes, heading) {
-    // "Write true or false" is a question whose every line carries a box. None
-    // of them is a choice, so nothing in it is ever stacked.
-    if (TRUE_FALSE_KEYWORDS.test(heading || '')) return nodes;
+    if (NOT_OPTION_HEADINGS.test(heading || '')) return nodes;
+    // A matching question's lines are pairs, never choices, whatever else the
+    // heading happens to say.
+    if (MATCH_KEYWORDS.test(heading || '')) return nodes;
 
     var mcqHeading = MCQ_KEYWORDS.test(heading || '');
     var grouped = [];

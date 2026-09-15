@@ -16,6 +16,7 @@
     accepted: {},      // suggestion id -> boolean
     headerEdits: {},   // field -> value typed by the user
     edits: {},         // block key -> line retyped in the preview
+    inserts: {},       // block key -> lines added after it
     editing: false,
     autoFixes: []
   };
@@ -142,6 +143,7 @@
     state.accepted = {};
     state.headerEdits = {};
     state.edits = {};
+    state.inserts = {};
     state.sourceName = source || 'paper';
     refresh({ resetHeaderInputs: true });
   }
@@ -157,7 +159,8 @@
       maxPages: parseInt(el.optPages.value, 10) || 2,
       densityId: el.optDensity.value,
       noQuestionGap: el.optNoGap.checked,
-      edits: state.edits
+      edits: state.edits,
+      inserts: state.inserts
     };
   }
 
@@ -304,8 +307,18 @@
    * against a position on the page, and it is fed back into compose() - so the
    * columns are packed around the new words, the page count is measured from
    * them, and the Word file, the clipboard text and the preview cannot drift
-   * apart. Emptying a line deletes it.
+   * apart.
+   *
+   * It behaves as a document, not as a row of boxes: Enter splits a line in
+   * two, Backspace at the start of one joins it to the line above, an emptied
+   * line disappears, and the arrow keys walk from line to line. Enter inside a
+   * row of options adds another option; Shift+Enter adds a whole new line
+   * after the row.
    */
+
+  var INSERT_SEP = '~';
+  var suppressCommit = false;  // set while the page is being rebuilt under us
+  var pendingFocus = null;     // { key, caret } - where to put the cursor after
 
   function bindPreviewEditing() {
     el.preview.addEventListener('focusin', function (event) {
@@ -315,37 +328,237 @@
 
     el.preview.addEventListener('focusout', function (event) {
       var node = editableTarget(event.target);
-      if (node) commitEdit(node);
+      if (!node) return;
+
+      // Committing rebuilds the page, which throws away the line the user has
+      // just clicked into. Where they were heading is known here, so the
+      // cursor is put back there afterwards - otherwise every move from one
+      // line to the next would need a second click.
+      var next = editableTarget(event.relatedTarget);
+      if (next) pendingFocus = { key: next.getAttribute('data-edit-key'), caret: caretOffset(next) };
+
+      commitEdit(node);
     });
 
-    el.preview.addEventListener('keydown', function (event) {
-      var node = editableTarget(event.target);
-      if (!node) return;
-      if (event.key === 'Enter') {
-        event.preventDefault(); // one block is one line; Enter means "done"
-        node.blur();
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        node.textContent = node.getAttribute('data-edit-before') || '';
-        node.blur();
-      }
-    });
+    el.preview.addEventListener('keydown', onEditKey);
 
     // Pasting from Word carries fonts, colours and sometimes whole tables.
-    // Only the words are wanted.
+    // Only the words are wanted - and several pasted lines stay several lines.
     el.preview.addEventListener('paste', function (event) {
       var node = editableTarget(event.target);
       if (!node || !event.clipboardData) return;
       event.preventDefault();
-      var text = PF.normalize.clean(event.clipboardData.getData('text/plain'));
-      try {
-        document.execCommand('insertText', false, text);
-      } catch (error) {
-        node.textContent = node.textContent + text; // older browsers
-      }
+
+      var lines = String(event.clipboardData.getData('text/plain') || '')
+        .split(/\r?\n/).map(PF.normalize.clean).filter(function (line) { return line !== ''; });
+      if (!lines.length) return;
+
+      insertText(node, lines[0]);
+      if (lines.length > 1) addLines(node.getAttribute('data-edit-key'), lines.slice(1), node);
     });
   }
 
+  function onEditKey(event) {
+    var node = editableTarget(event.target);
+    if (!node) return;
+    var key = node.getAttribute('data-edit-key');
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      // Splitting only works where a line can actually be inserted: a line of
+      // its own, or an option in a row of them. The marks in the margin, a
+      // header field and a column of a match cannot hold one, so there Enter
+      // starts a new line after the whole row instead.
+      if (!event.shiftKey && canHostInsert(node)) splitLine(node, key);
+      else addLines(blockKeyOf(node), [''], node);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      node.textContent = node.getAttribute('data-edit-before') || '';
+      node.blur();
+      return;
+    }
+
+    if (event.key === 'Backspace' && caretOffset(node) === 0 && !hasSelection()) {
+      var previous = neighbour(node, -1);
+      if (!previous) return;                  // the first line has nothing to join
+      event.preventDefault();
+      joinWithPrevious(node, key, previous);
+      return;
+    }
+
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      var target = neighbour(node, event.key === 'ArrowUp' ? -1 : 1);
+      if (!target) return;
+      event.preventDefault();
+      pendingFocus = { key: target.getAttribute('data-edit-key'), caret: null };
+      commitEdit(node);                       // may rebuild the page
+      if (pendingFocus) applyPendingFocus();  // ... and if it did not, move now
+    }
+  }
+
+  /** Enter: what is left of the cursor stays, what is right becomes a new line. */
+  function splitLine(node, key) {
+    var text = PF.normalize.clean(node.textContent);
+    var at = caretOffset(node);
+    var head = at === null ? text : PF.normalize.clean(text.slice(0, at));
+    var tail = at === null ? '' : PF.normalize.clean(text.slice(at));
+
+    setText(key, head, true);
+    addLines(key, [tail], null);
+  }
+
+  /** True where the key belongs to a whole line, or to one option of a row. */
+  function canHostInsert(node) {
+    var key = node.getAttribute('data-edit-key');
+    if (key && key === blockKeyOf(node)) return true;
+    var owner = node.parentNode;
+    return !!(owner && owner.getAttribute && owner.getAttribute('data-cell-inserts'));
+  }
+
+  /**
+   * Backspace at the start of a line: its words go onto the line above and the
+   * line itself goes away - the same gesture as in any editor.
+   */
+  function joinWithPrevious(node, key, previous) {
+    var text = PF.normalize.clean(node.textContent);
+    var previousKey = previous.getAttribute('data-edit-key');
+    var joined = PF.normalize.clean(previous.textContent + (text ? ' ' + text : ''));
+
+    removeLine(key);
+    setText(previousKey, joined);
+    pendingFocus = { key: previousKey, caret: previous.textContent.length };
+    rebuild();
+  }
+
+  /**
+   * Adds lines (or options, inside a row) after `anchorKey`, keeping whatever
+   * the user had already typed into the line they are standing on - the page
+   * is about to be rebuilt, and the blur that would have saved it is suppressed.
+   */
+  function addLines(anchorKey, texts, node) {
+    if (!anchorKey) return;
+    if (node) setText(node.getAttribute('data-edit-key'), PF.normalize.clean(node.textContent), true);
+
+    var key = anchorKey;
+    texts.forEach(function (text) { key = insertAfter(key, text); });
+
+    pendingFocus = { key: key, caret: 0 };
+    rebuild();
+  }
+
+  function rebuild() {
+    // The text has already been taken from every line on the page. Browsers
+    // deliver the blur of a line that is being replaced after the fact, and
+    // without this the stale text it still holds would be committed over the
+    // change that replaced it - undoing a split the moment it happened.
+    editableNodes().forEach(function (node) {
+      node.setAttribute('data-edit-before', node.textContent);
+    });
+
+    if (pendingFocus) pendingFocus.key = pruneEmptyInserts(pendingFocus.key);
+    else pruneEmptyInserts(null);
+
+    suppressCommit = true;
+    refresh();
+    suppressCommit = false;
+    applyPendingFocus();
+  }
+
+  /**
+   * Drops added lines that were left empty - all but the one about to be typed
+   * into. An empty line is what "I have changed my mind" looks like, and it
+   * must not travel into the Word file as a blank paragraph.
+   */
+  function pruneEmptyInserts(keepKey) {
+    var moved = keepKey;
+
+    Object.keys(state.inserts).forEach(function (anchor) {
+      var kept = [];
+      state.inserts[anchor].forEach(function (text, index) {
+        var key = anchor + INSERT_SEP + index;
+        if (!text && key !== keepKey) return;
+        if (key === keepKey) moved = anchor + INSERT_SEP + kept.length;
+        kept.push(text);
+      });
+      if (kept.length) state.inserts[anchor] = kept;
+      else delete state.inserts[anchor];
+    });
+
+    return moved;
+  }
+
+  function commitEdit(node) {
+    if (suppressCommit) return;
+    var key = node.getAttribute('data-edit-key');
+    var text = PF.normalize.clean(node.textContent);
+
+    // A line that was added and then left empty was a change of mind, not a
+    // blank line: it goes away rather than being carried into the document.
+    if (!text && splitKey(key).index >= 0) {
+      removeLine(key);
+      return rebuild();
+    }
+
+    if (text === PF.normalize.clean(node.getAttribute('data-edit-before') || '')) {
+      pendingFocus = null; // nothing is being rebuilt, so nothing to put back
+      return;
+    }
+
+    setText(key, text);
+    rebuild();
+  }
+
+  /* --- where a line's text lives ---------------------------------------- */
+
+  /** A composed line, or the nth line inserted after one. */
+  function splitKey(key) {
+    var at = String(key || '').lastIndexOf(INSERT_SEP);
+    if (at < 0) return { anchor: key, index: -1 };
+    return { anchor: key.slice(0, at), index: parseInt(key.slice(at + 1), 10) };
+  }
+
+  function setText(key, text, quiet) {
+    var parts = splitKey(key);
+
+    if (parts.index >= 0) {
+      var list = state.inserts[parts.anchor];
+      if (list) list[parts.index] = text;
+    } else if (HEADER_FIELDS[key]) {
+      applyHeaderLineEdit(HEADER_FIELDS[key], text);
+    } else {
+      state.edits[key] = text;
+    }
+    if (!quiet) renderEditStatus();
+  }
+
+  function insertAfter(key, text) {
+    var parts = splitKey(key);
+    var list = state.inserts[parts.anchor] || (state.inserts[parts.anchor] = []);
+    var at = parts.index >= 0 ? parts.index + 1 : 0;
+    list.splice(at, 0, text || '');
+    return parts.anchor + INSERT_SEP + at;
+  }
+
+  function removeLine(key) {
+    var parts = splitKey(key);
+    if (parts.index < 0) return setText(key, '');
+
+    var list = state.inserts[parts.anchor];
+    if (!list) return;
+    list.splice(parts.index, 1);
+    if (!list.length) delete state.inserts[parts.anchor];
+  }
+
+  /* --- moving about ------------------------------------------------------ */
+
+  function editableNodes() {
+    return Array.prototype.slice.call(el.preview.querySelectorAll('[data-edit-key]'));
+  }
+
+  /** The editable line an event landed in, or null if it landed elsewhere. */
   function editableTarget(node) {
     while (node && node !== el.preview) {
       if (node.getAttribute && node.getAttribute('data-edit-key')) return node;
@@ -354,15 +567,79 @@
     return null;
   }
 
-  function commitEdit(node) {
-    var key = node.getAttribute('data-edit-key');
-    var text = PF.normalize.clean(node.textContent);
-    if (text === PF.normalize.clean(node.getAttribute('data-edit-before') || '')) return;
+  function neighbour(node, step) {
+    var nodes = editableNodes();
+    return nodes[nodes.indexOf(node) + step] || null;
+  }
 
-    if (HEADER_FIELDS[key]) applyHeaderLineEdit(HEADER_FIELDS[key], text);
-    else state.edits[key] = text;
+  function blockKeyOf(node) {
+    while (node && node !== el.preview) {
+      if (node.getAttribute && node.getAttribute('data-block-key')) return node.getAttribute('data-block-key');
+      node = node.parentNode;
+    }
+    return null;
+  }
 
-    refresh();
+  /** How far into the line the cursor is, or null where there is no selection. */
+  function caretOffset(node) {
+    try {
+      var selection = window.getSelection();
+      if (!selection || !selection.rangeCount || !node.contains(selection.anchorNode)) return null;
+      var range = selection.getRangeAt(0).cloneRange();
+      var measure = document.createRange();
+      measure.selectNodeContents(node);
+      measure.setEnd(range.endContainer, range.endOffset);
+      return measure.toString().length;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function hasSelection() {
+    try {
+      var selection = window.getSelection();
+      return !!selection && !selection.isCollapsed;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function applyPendingFocus() {
+    var target = pendingFocus;
+    pendingFocus = null;
+    if (!target || !target.key) return;
+
+    var node = el.preview.querySelector('[data-edit-key="' + target.key + '"]');
+    if (!node) return;
+    node.focus();
+    placeCaret(node, target.caret);
+  }
+
+  function placeCaret(node, offset) {
+    try {
+      var selection = window.getSelection();
+      if (!selection) return;
+      var range = document.createRange();
+      if (node.firstChild) {
+        var max = node.firstChild.textContent.length;
+        range.setStart(node.firstChild, Math.min(offset === null || offset === undefined ? max : offset, max));
+      } else {
+        range.selectNodeContents(node);
+      }
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } catch (error) {
+      /* a browser without a selection API still gets the focus, just not the spot */
+    }
+  }
+
+  function insertText(node, text) {
+    try {
+      document.execCommand('insertText', false, text);
+    } catch (error) {
+      node.textContent = node.textContent + text;
+    }
   }
 
   /** A header line edited in the preview goes back into its box on the left. */
@@ -394,8 +671,9 @@
     Array.prototype.forEach.call(el.preview.querySelectorAll('[data-edit-key]'), function (node) {
       setEditableFlag(node, state.editing);
       node.spellcheck = false;
+      var key = node.getAttribute('data-edit-key');
       node.classList.toggle('edited',
-        Object.prototype.hasOwnProperty.call(state.edits, node.getAttribute('data-edit-key')));
+        Object.prototype.hasOwnProperty.call(state.edits, key) || key.indexOf(INSERT_SEP) >= 0);
     });
   }
 
@@ -407,8 +685,11 @@
   function setEditableFlag(node, on) {
     if (!on) {
       node.contentEditable = 'false';
+      node.removeAttribute('tabindex');
       return;
     }
+    // In the tab order while editing, so Tab walks from line to line.
+    node.setAttribute('tabindex', '0');
     try {
       node.contentEditable = 'plaintext-only';
     } catch (error) {
@@ -418,15 +699,20 @@
   }
 
   function renderEditStatus() {
-    var count = Object.keys(state.edits).length;
+    var count = Object.keys(state.edits).length
+      + Object.keys(state.inserts).reduce(function (sum, key) {
+        return sum + state.inserts[key].length;
+      }, 0);
+
     el.resetEdits.hidden = count === 0;
     el.editStatus.textContent = state.editing
-      ? 'Click any line to correct it. Enter keeps the change, Esc cancels, an empty line is deleted.'
-      : (count ? count + (count === 1 ? ' line' : ' lines') + ' edited by hand' : '');
+      ? 'Type anywhere. Enter splits a line (or adds an option), Backspace at the start joins it to the one above, Esc undoes the line.'
+      : (count ? count + (count === 1 ? ' line' : ' lines') + ' changed by hand' : '');
   }
 
   function clearEdits() {
     state.edits = {};
+    state.inserts = {};
     refresh();
     toast('Manual edits undone');
   }

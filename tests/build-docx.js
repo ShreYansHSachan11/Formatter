@@ -40,17 +40,18 @@ var OPTIONS = {
   densityId: 'auto'
 };
 
-function buildOne(name, sourceText) {
+function buildOne(name, sourceText, extra) {
+  var options = Object.assign({}, OPTIONS, extra || {});
   var prepared = PF.normalize.prepare(sourceText || PF.samples[name]);
   var suggestions = PF.normalize.suggest(prepared.lines);
   var paper = PF.parser.parse(prepared.lines, {
     properNouns: PF.normalize.buildProperNounMap(prepared.lines),
     acceptedSuggestions: suggestions.filter(function (s) { return s.confidence === 'high'; }),
-    fontSizePt: OPTIONS.fontSizePt
+    fontSizePt: options.fontSizePt
   });
-  var result = PF.layout.fit(paper, OPTIONS);
+  var result = PF.layout.fit(paper, options);
 
-  return PF.renderDocx.toBlob(result, OPTIONS).then(function (blob) {
+  return PF.renderDocx.toBlob(result, options).then(function (blob) {
     return blob.arrayBuffer();
   }).then(function (buffer) {
     var file = path.join(OUT, name + '.docx');
@@ -58,12 +59,14 @@ function buildOne(name, sourceText) {
     return JSZip.loadAsync(buffer).then(function (zip) {
       return zip.file('word/document.xml').async('string');
     }).then(function (xml) {
-      report(name, file, xml, result);
+      report(name, file, xml, result, extra);
     });
   });
 }
 
-function report(name, file, xml, result) {
+var failed = 0;
+
+function report(name, file, xml, result, extra) {
   var checks = {
     'page size A4 (11906 x 16838 twips)': /w:w="11906"/.test(xml) && /w:h="16838"/.test(xml),
     'font size 24 half-points (12pt)': /w:sz w:val="24"/.test(xml),
@@ -78,11 +81,17 @@ function report(name, file, xml, result) {
     'no empty paragraphs run together': !/<w:p\/><w:p\/>/.test(xml)
   };
 
+  // A paper corrected by hand has to reach the file as corrected, and a line
+  // added in the preview has to arrive as a paragraph of its own.
+  if (extra && extra.edits) checks['hand-edited line in the document'] = /Ticked by hand/.test(xml);
+  if (extra && extra.inserts) checks['hand-added line in the document'] = /Added by hand/.test(xml);
+
   console.log('\n=== ' + name + ' ===');
   console.log('  file      : ' + path.relative(ROOT, file) + ' (' + fs.statSync(file).size + ' bytes)');
   console.log('  density   : ' + result.density.id + ', pages: ' + result.pageCount);
   console.log('  paragraphs: ' + (xml.match(/<w:p [^>]*>|<w:p>/g) || []).length);
   Object.keys(checks).forEach(function (label) {
+    if (!checks[label]) failed++;
     console.log('  ' + (checks[label] ? '[ok]  ' : '[FAIL]') + ' ' + label);
   });
 }
@@ -92,8 +101,22 @@ var extra = process.argv[2];
 buildOne('english')
   .then(function () { return buildOne('hindi'); })
   .then(function () {
+    // The same paper with a line corrected and a line added in the preview.
+    return buildOne('edited', PF.samples.english, {
+      edits: { 'q0.head': 'Que 1. Ticked by hand:' },
+      inserts: { 'q0.head': ['Added by hand, under the question'] }
+    });
+  })
+  .then(function () {
     if (!extra) return null;
     return buildOne(path.basename(extra).replace(/.[^.]+$/, ''), fs.readFileSync(extra, 'utf8'));
+  })
+  .then(function () {
+    // A check that prints [FAIL] and then exits 0 is a check nobody sees.
+    if (failed) {
+      console.error('\n' + failed + ' check(s) failed.');
+      process.exit(1);
+    }
   })
   .catch(function (error) {
     console.error('FAILED:', error && error.stack || error);

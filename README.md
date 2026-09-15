@@ -22,10 +22,20 @@ Word file will look like.
 ## Correcting a line by hand
 
 However good the rules are, one line in a paper will always need a person to
-fix it. **Edit the paper** turns the preview into something you can type in:
+fix it. **Edit the paper** turns the preview into a document you can type in:
 click any line — a question, an option, a column of a match, a header field —
-and correct it. Enter keeps the change, Esc cancels it, and emptying a line
-deletes it. **Undo all edits** puts everything back.
+and correct it.
+
+| Key | What it does |
+| --- | --- |
+| Enter | splits the line at the cursor, or — inside a row of options — adds another option |
+| Shift+Enter | starts a new line under the whole row |
+| Backspace at the start of a line | joins it to the line above |
+| Esc | puts the line back as it was |
+| Tab / ↑ ↓ | move to the next line |
+
+Emptying a line deletes it, and a line you add and then leave empty goes away
+by itself. **Undo all edits** puts the whole paper back.
 
 What you type is not pasted over the finished page. It is stored against the
 line it belongs to and fed back through the formatter, so the options are
@@ -35,8 +45,10 @@ line you edit goes back into its box on the left rather than becoming an
 override, so the two never disagree.
 
 Edits are keyed to the question and item they came from, not to a position on
-the page, so they survive a change of spacing, font or page limit. Loading a
-different paper clears them.
+the page, so they survive a change of spacing, font or page limit. A line you
+add is keyed to the line it follows, for the same reason, and its text lives in
+that list — so inserting in the middle simply moves the ones after it along.
+Loading a different paper clears the lot.
 
 ## Options typed one below the other
 

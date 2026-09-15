@@ -25,6 +25,7 @@
 
   var INDENT = { sub: 0.3, option: 0.58, item: 0.3, pair: 0.3 };
   var COLUMN_GAP_IN = 0.2;
+  var INSERT_SEP = '~'; // "q2.i0~1" - the second line the user added after item 1
 
   function contentWidthIn(density) {
     return PAGE.widthIn - 2 * density.marginXIn;
@@ -111,6 +112,73 @@
     return text;
   }
 
+  /*
+   * Lines and options the user added in the preview.
+   *
+   * An insert is anchored to the key of the line - or the option - it follows,
+   * and its text lives in the list rather than in an override, so inserting in
+   * the middle simply moves the ones after it along. Nothing is keyed by where
+   * it happens to sit on the page, so an insert survives a change of spacing.
+   */
+  function insertsFor(options, key) {
+    var inserts = options && options.inserts;
+    if (!key || !inserts || !Object.prototype.hasOwnProperty.call(inserts, key)) return null;
+    return inserts[key] && inserts[key].length ? inserts[key] : null;
+  }
+
+  /**
+   * The cells of a row, with edits applied, emptied cells dropped (that is how
+   * an option is deleted) and added ones spliced in after the cell they follow.
+   */
+  function expandCells(keys, texts, options) {
+    var outKeys = [];
+    var outCells = [];
+
+    var add = function (key, text, added) {
+      var value = sanitize(text);
+      // An emptied cell is a deleted one - but an option the user has just
+      // added starts empty by definition, and has to be there to be typed into.
+      if (!value && !added) return;
+      outKeys.push(key);
+      outCells.push(value);
+    };
+
+    keys.forEach(function (key, index) {
+      add(key, edited(options, key, texts[index]));
+      var extra = insertsFor(options, key);
+      if (extra) extra.forEach(function (text, i) { add(key + INSERT_SEP + i, text, true); });
+    });
+
+    return { keys: outKeys, cells: outCells };
+  }
+
+  /** Whole lines added after a line, or after a row of options. */
+  function applyLineInserts(blocks, options) {
+    if (!options || !options.inserts) return blocks;
+    var out = [];
+
+    blocks.forEach(function (block) {
+      out.push(block);
+      var extra = insertsFor(options, block.key);
+      if (!extra) return;
+
+      extra.forEach(function (text, index) {
+        out.push({
+          type: block.cells ? 'item' : block.type,
+          key: block.key + INSERT_SEP + index,
+          inserted: true, // starts empty, waiting to be typed into
+          runs: [run(text, !block.cells && block.runs && block.runs[0] && block.runs[0].bold)],
+          align: block.cells ? undefined : block.align,
+          indentIn: block.indentIn || 0,
+          hangingIn: block.hangingIn || 0,
+          spaceBeforePt: 0
+        });
+      });
+    });
+
+    return out;
+  }
+
   function questionPrefix(question, options) {
     var style = options.questionPrefix || 'auto';
     if (style === 'auto') {
@@ -169,8 +237,13 @@
     if (line4.length) {
       blocks.push({
         type: 'header-row',
+        key: 'h.row',
         cellKeys: line4Keys,
         cells: line4.map(function (cell, index) { return sanitize(edited(options, line4Keys[index], cell)); }),
+        // Time, Class and M.M. share one line, spread across the width. Saying
+        // so here matters: without it the page measurement counts the row as
+        // three lines and the paper is squeezed tighter than it needs to be.
+        cols: line4.length,
         bold: true,
         indentIn: 0,
         spaceBeforePt: 0
@@ -234,22 +307,26 @@
           });
         }
         if (sub.options.length) {
-          var keys = sub.options.map(function (option, i) { return subBase + '.o' + i; });
-          var cells = sub.options.map(function (option, i) {
-            return edited(options, keys[i], optionText(option));
-          });
+          var row = expandCells(
+            sub.options.map(function (option, i) { return subBase + '.o' + i; }),
+            sub.options.map(optionText),
+            options
+          );
           // Every option on one line when they fit, which is what the measured
           // packing is for; only genuinely long choices end up stacked.
-          var packed = packColumns(cells, available - INDENT.option, fontPt, cells.length);
-          blocks.push({
-            type: 'options',
-            cellKeys: keys,
-            cells: cells,
-            cols: packed.cols,
-            colWidthsIn: packed.widthsIn,
-            indentIn: INDENT.option,
-            spaceBeforePt: 0
-          });
+          var packed = packColumns(row.cells, available - INDENT.option, fontPt, row.cells.length);
+          if (row.cells.length) {
+            blocks.push({
+              type: 'options',
+              key: subBase + '.opts',
+              cellKeys: row.keys,
+              cells: row.cells,
+              cols: packed.cols,
+              colWidthsIn: packed.widthsIn,
+              indentIn: INDENT.option,
+              spaceBeforePt: 0
+            });
+          }
         }
       });
       return blocks;
@@ -270,6 +347,7 @@
         var headerKeys = [base + '.ch.l', base + '.ch.r'];
         blocks.push({
           type: 'pair',
+          key: base + '.ch',
           cellKeys: headerKeys,
           cells: [question.columnHeaders.left, question.columnHeaders.right].map(function (cell, i) {
             return sanitize(edited(options, headerKeys[i], cell));
@@ -286,6 +364,7 @@
         var pairKeys = [base + '.p' + index + '.l', base + '.p' + index + '.r'];
         blocks.push({
           type: 'pair',
+          key: base + '.p' + index,
           cellKeys: pairKeys,
           cells: [leftCells[index], pair.right].map(function (cell, i) {
             return sanitize(edited(options, pairKeys[i], cell));
@@ -300,23 +379,27 @@
     }
 
     if (question.kind === 'inline') {
-      var inlineKeys = question.items.map(function (item, index) { return base + '.i' + index; });
-      var inlineCells = question.items.map(function (item, index) {
-        return edited(options, inlineKeys[index], itemText(item));
-      });
+      var inline = expandCells(
+        question.items.map(function (item, index) { return base + '.i' + index; }),
+        question.items.map(itemText),
+        options
+      );
       // How many fit is measured, not guessed: each column is sized from its
       // own items, and a blank counts towards the width, so items answered on
       // the page end up two or three across while bare words sit five across.
-      var inlinePacked = packColumns(inlineCells, available - INDENT.item, fontPt, 5);
-      blocks.push({
-        type: 'inline',
-        cellKeys: inlineKeys,
-        cells: inlineCells,
-        cols: inlinePacked.cols,
-        colWidthsIn: inlinePacked.widthsIn,
-        indentIn: INDENT.item,
-        spaceBeforePt: 0
-      });
+      var inlinePacked = packColumns(inline.cells, available - INDENT.item, fontPt, 5);
+      if (inline.cells.length) {
+        blocks.push({
+          type: 'inline',
+          key: base + '.inline',
+          cellKeys: inline.keys,
+          cells: inline.cells,
+          cols: inlinePacked.cols,
+          colWidthsIn: inlinePacked.widthsIn,
+          indentIn: INDENT.item,
+          spaceBeforePt: 0
+        });
+      }
       return blocks;
     }
 
@@ -341,7 +424,7 @@
    * carries its prefix and an item always carries its label.
    */
   function isEmptyLine(block) {
-    if (block.type === 'rule' || block.cells) return false;
+    if (block.type === 'rule' || block.cells || block.inserted) return false;
     return (block.runs || []).every(function (item) { return !item.text; });
   }
 
@@ -350,7 +433,8 @@
     paper.questions.forEach(function (question, index) {
       blocks = blocks.concat(composeQuestion(question, density, options, index === 0, 'q' + index));
     });
-    return blocks.filter(function (block) { return !isEmptyLine(block); });
+    return applyLineInserts(blocks, options)
+      .filter(function (block) { return !isEmptyLine(block); });
   }
 
   PF.compose = {

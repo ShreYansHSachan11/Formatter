@@ -258,6 +258,15 @@ details summary { cursor: pointer; font-size: 12.5px; color: var(--accent); marg
 
 .preview [data-edit-key].edited { background: rgba(250, 204, 21, .18); }
 
+/* A line or option just added is empty, and an empty span has nothing to
+   click. Give it a width so it can be aimed at as well as typed into. */
+.preview.editing [data-edit-key]:empty {
+  display: inline-block;
+  min-width: 3em;
+  min-height: 1em;
+  background: rgba(31, 95, 191, .08);
+}
+
 .empty {
   border: 1px dashed var(--line);
   border-radius: var(--radius);

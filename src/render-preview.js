@@ -48,6 +48,15 @@
   }
 
   function renderBlock(block, density, options) {
+    var node = buildBlock(block, density, options);
+    // The block a line belongs to, so that a whole new line can be added after
+    // it - including after a row of options, where the cells have keys of
+    // their own but the row itself needs one too.
+    if (block.key) node.setAttribute('data-block-key', block.key);
+    return node;
+  }
+
+  function buildBlock(block, density, options) {
     var content = PF.compose.contentWidthIn(density);
 
     if (block.type === 'rule') {
@@ -82,6 +91,9 @@
       // tab stops the Word file uses - so adding the stylesheet's gap on top
       // would put the preview and the document out of step.
       if (block.colWidthsIn) grid.style.columnGap = '0';
+      // A row of options or of one-word items can take another one; the two
+      // columns of a match cannot, so pressing Enter there adds a line instead.
+      if (block.type === 'options' || block.type === 'inline') grid.setAttribute('data-cell-inserts', '1');
       block.cells.forEach(function (cell, index) {
         var cellNode = el('span');
         cellNode.textContent = cell;
