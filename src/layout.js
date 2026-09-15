@@ -37,17 +37,19 @@
     if (block.type === 'rule') return fontPt * 0.45 * density.line + (block.spaceBeforePt || 0);
 
     if (block.cells) {
-      var rows;
-      if (block.colWidthsIn) {
-        rows = 1;
-        // A match pair wraps if either side overflows its column.
-        block.cells.forEach(function (cell, index) {
-          rows = Math.max(rows, PF.text.lineCount(cell, fontPt, block.colWidthsIn[index] - 0.1));
-        });
-      } else {
-        rows = Math.ceil(block.cells.length / (block.cols || 1));
+      var cols = block.cols || (block.colWidthsIn ? block.colWidthsIn.length : 1);
+      var rows = 0;
+      // One row per group of `cols` cells, plus any row that wraps because a
+      // cell is wider than the column it sits in.
+      for (var start = 0; start < block.cells.length; start += cols) {
+        var lines = 1;
+        for (var i = start; i < Math.min(start + cols, block.cells.length); i++) {
+          if (!block.colWidthsIn) continue;
+          lines = Math.max(lines, PF.text.lineCount(block.cells[i], fontPt, block.colWidthsIn[i - start] - 0.1));
+        }
+        rows += lines;
       }
-      return rows * height + (block.spaceBeforePt || 0);
+      return Math.max(rows, 1) * height + (block.spaceBeforePt || 0);
     }
 
     var reserved = block.rightRuns

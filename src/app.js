@@ -15,8 +15,23 @@
     suggestions: [],
     accepted: {},      // suggestion id -> boolean
     headerEdits: {},   // field -> value typed by the user
+    edits: {},         // block key -> line retyped in the preview
+    editing: false,
     autoFixes: []
   };
+
+  // Header lines are edited in the preview like any other line, but they are
+  // not stored as overrides: they are put back into the boxes on the left, so
+  // the two never end up showing different things.
+  var HEADER_FIELDS = {
+    'h.school': 'school', 'h.exam': 'exam', 'h.subject': 'subject',
+    'h.time': 'time', 'h.class': 'className', 'h.marks': 'maxMarks'
+  };
+  var HEADER_INPUTS = {
+    school: 'hdrSchool', exam: 'hdrExam', subject: 'hdrSubject',
+    time: 'hdrTime', className: 'hdrClass', maxMarks: 'hdrMarks'
+  };
+  var HEADER_LABELS = { subject: 'subject', time: 'time', className: 'class', maxMarks: 'marks' };
 
   var el = {};
 
@@ -27,6 +42,7 @@
       'statusLine', 'copyBtn', 'downloadBtn', 'dropZone', 'browseBtn', 'fileInput',
       'pasteArea', 'pasteBtn', 'preview', 'previewScale', 'previewNote', 'emptyState',
       'suggestions', 'autoFixSummary', 'autoFixDetails', 'autoFixList', 'toast',
+      'editToggle', 'editStatus', 'resetEdits',
       'optPages', 'optDensity', 'optLatinFont', 'optHindiFont', 'optFontSize', 'optPrefix', 'optNoGap',
       'hdrSubject', 'hdrClass', 'hdrTime', 'hdrMarks', 'hdrSchool', 'hdrExam'
     ].forEach(function (id) { el[id] = $(id); });
@@ -99,6 +115,10 @@
     el.copyBtn.addEventListener('click', copyText);
     el.downloadBtn.addEventListener('click', downloadDocx);
     window.addEventListener('resize', scalePreview);
+
+    el.editToggle.addEventListener('click', function () { setEditing(!state.editing); });
+    el.resetEdits.addEventListener('click', clearEdits);
+    bindPreviewEditing();
   }
 
   function loadFile(file) {
@@ -121,6 +141,7 @@
     state.raw = text || '';
     state.accepted = {};
     state.headerEdits = {};
+    state.edits = {};
     state.sourceName = source || 'paper';
     refresh({ resetHeaderInputs: true });
   }
@@ -135,7 +156,8 @@
       questionPrefix: el.optPrefix.value,
       maxPages: parseInt(el.optPages.value, 10) || 2,
       densityId: el.optDensity.value,
-      noQuestionGap: el.optNoGap.checked
+      noQuestionGap: el.optNoGap.checked,
+      edits: state.edits
     };
   }
 
@@ -254,6 +276,8 @@
     el.emptyState.hidden = true;
     el.emptyState.style.display = 'none';
     PF.renderPreview.render(el.preview, state.result, options);
+    applyEditing();
+    renderEditStatus();
     scalePreview();
   }
 
@@ -268,6 +292,143 @@
     el.previewScale.style.transform = 'scale(' + scale + ')';
     el.previewScale.style.height = (el.preview.scrollHeight * scale) + 'px';
     el.previewScale.style.width = pageWidthPx + 'px';
+  }
+
+  /* ------------------------------------------------------ editing by hand
+   *
+   * However good the rules are, one line in a paper will always need a human
+   * to fix it. Rather than send the user to Word for that, every line in the
+   * preview can be corrected in place.
+   *
+   * What they type is stored against the key of the block it came from, not
+   * against a position on the page, and it is fed back into compose() - so the
+   * columns are packed around the new words, the page count is measured from
+   * them, and the Word file, the clipboard text and the preview cannot drift
+   * apart. Emptying a line deletes it.
+   */
+
+  function bindPreviewEditing() {
+    el.preview.addEventListener('focusin', function (event) {
+      var node = editableTarget(event.target);
+      if (node) node.setAttribute('data-edit-before', node.textContent);
+    });
+
+    el.preview.addEventListener('focusout', function (event) {
+      var node = editableTarget(event.target);
+      if (node) commitEdit(node);
+    });
+
+    el.preview.addEventListener('keydown', function (event) {
+      var node = editableTarget(event.target);
+      if (!node) return;
+      if (event.key === 'Enter') {
+        event.preventDefault(); // one block is one line; Enter means "done"
+        node.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        node.textContent = node.getAttribute('data-edit-before') || '';
+        node.blur();
+      }
+    });
+
+    // Pasting from Word carries fonts, colours and sometimes whole tables.
+    // Only the words are wanted.
+    el.preview.addEventListener('paste', function (event) {
+      var node = editableTarget(event.target);
+      if (!node || !event.clipboardData) return;
+      event.preventDefault();
+      var text = PF.normalize.clean(event.clipboardData.getData('text/plain'));
+      try {
+        document.execCommand('insertText', false, text);
+      } catch (error) {
+        node.textContent = node.textContent + text; // older browsers
+      }
+    });
+  }
+
+  function editableTarget(node) {
+    while (node && node !== el.preview) {
+      if (node.getAttribute && node.getAttribute('data-edit-key')) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  function commitEdit(node) {
+    var key = node.getAttribute('data-edit-key');
+    var text = PF.normalize.clean(node.textContent);
+    if (text === PF.normalize.clean(node.getAttribute('data-edit-before') || '')) return;
+
+    if (HEADER_FIELDS[key]) applyHeaderLineEdit(HEADER_FIELDS[key], text);
+    else state.edits[key] = text;
+
+    refresh();
+  }
+
+  /** A header line edited in the preview goes back into its box on the left. */
+  function applyHeaderLineEdit(field, text) {
+    var labelName = HEADER_LABELS[field];
+    var value = text;
+
+    if (labelName && state.paper) {
+      var label = PF.compose.labelFor(labelName, state.paper.header).trim();
+      if (value.indexOf(label) === 0) value = value.slice(label.length).replace(/^[\s:.–-]+/, '');
+    }
+
+    state.headerEdits[field] = value;
+    var input = el[HEADER_INPUTS[field]];
+    if (input) input.value = value;
+  }
+
+  function setEditing(on) {
+    state.editing = !!on;
+    el.editToggle.textContent = state.editing ? 'Done editing' : 'Edit the paper';
+    el.editToggle.setAttribute('aria-pressed', state.editing ? 'true' : 'false');
+    el.editToggle.classList.toggle('btn-primary', state.editing);
+    applyEditing();
+    renderEditStatus();
+  }
+
+  function applyEditing() {
+    el.preview.classList.toggle('editing', state.editing);
+    Array.prototype.forEach.call(el.preview.querySelectorAll('[data-edit-key]'), function (node) {
+      setEditableFlag(node, state.editing);
+      node.spellcheck = false;
+      node.classList.toggle('edited',
+        Object.prototype.hasOwnProperty.call(state.edits, node.getAttribute('data-edit-key')));
+    });
+  }
+
+  /*
+   * "plaintext-only" keeps pasted formatting out of the line, but not every
+   * browser accepts it - Firefox rejects the value outright - so plain
+   * editing is the fallback, with the paste handler cleaning up after it.
+   */
+  function setEditableFlag(node, on) {
+    if (!on) {
+      node.contentEditable = 'false';
+      return;
+    }
+    try {
+      node.contentEditable = 'plaintext-only';
+    } catch (error) {
+      node.contentEditable = 'true';
+    }
+    if (node.contentEditable !== 'plaintext-only') node.contentEditable = 'true';
+  }
+
+  function renderEditStatus() {
+    var count = Object.keys(state.edits).length;
+    el.resetEdits.hidden = count === 0;
+    el.editStatus.textContent = state.editing
+      ? 'Click any line to correct it. Enter keeps the change, Esc cancels, an empty line is deleted.'
+      : (count ? count + (count === 1 ? ' line' : ' lines') + ' edited by hand' : '');
+  }
+
+  function clearEdits() {
+    state.edits = {};
+    refresh();
+    toast('Manual edits undone');
   }
 
   function renderStatus(options) {
@@ -305,6 +466,9 @@
 
     el.copyBtn.disabled = false;
     el.downloadBtn.disabled = false;
+    el.editToggle.disabled = !questions;
+    // Nothing to correct means nothing to be in editing mode for.
+    if (!questions && state.editing) setEditing(false);
   }
 
   /* ---------------------------------------------------------------- output */

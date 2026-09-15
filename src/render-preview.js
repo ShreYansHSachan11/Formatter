@@ -30,6 +30,17 @@
       : '"' + options.latinFont + '", Arial, sans-serif';
   }
 
+  /*
+   * Tags a piece of text with the key its block carries, so that the app can
+   * hand a person the preview to correct by hand and put what they type back
+   * into the same slot the pipeline composed - rather than into a position in
+   * the page, which moves the moment the spacing changes.
+   */
+  function markEditable(node, key) {
+    if (key) node.setAttribute('data-edit-key', key);
+    return node;
+  }
+
   function styleBlock(node, block, density, options) {
     node.style.marginTop = (block.spaceBeforePt || 0) / 72 + 'in';
     node.style.lineHeight = String(1.2 * density.line);
@@ -54,6 +65,7 @@
         cellNode.style.fontWeight = block.bold ? '700' : '400';
         cellNode.style.fontFamily = fontStack(cell, options);
         cellNode.style.textAlign = index === 0 ? 'left' : (index === block.cells.length - 1 ? 'right' : 'center');
+        markEditable(cellNode, block.cellKeys && block.cellKeys[index]);
         row.appendChild(cellNode);
       });
       return row;
@@ -66,11 +78,16 @@
       grid.style.gridTemplateColumns = block.colWidthsIn
         ? block.colWidthsIn.map(function (w) { return w + 'in'; }).join(' ')
         : 'repeat(' + (block.cols || 1) + ', 1fr)';
-      block.cells.forEach(function (cell) {
+      // Measured widths already carry the gap between columns - they are the
+      // tab stops the Word file uses - so adding the stylesheet's gap on top
+      // would put the preview and the document out of step.
+      if (block.colWidthsIn) grid.style.columnGap = '0';
+      block.cells.forEach(function (cell, index) {
         var cellNode = el('span');
         cellNode.textContent = cell;
         cellNode.style.fontWeight = block.bold ? '700' : '400';
         cellNode.style.fontFamily = fontStack(cell, options);
+        markEditable(cellNode, block.cellKeys && block.cellKeys[index]);
         grid.appendChild(cellNode);
       });
       return grid;
@@ -86,12 +103,14 @@
 
     var main = el('span');
     main.textContent = text;
+    markEditable(main, block.key);
     line.appendChild(main);
 
     if (block.rightRuns) {
       line.classList.add('pv-split');
       var right = el('span', 'pv-right');
       right.textContent = runsToText(block.rightRuns);
+      markEditable(right, block.marksKey);
       line.appendChild(right);
     }
     return line;

@@ -30,8 +30,19 @@
   var MARKS_RE = /[\(\[]\s*(\d{1,3})\s*[\)\]]\s*[\.\?:]*\s*$/;
   var EMPTY_BOX_RE = /\(\s*\)/g;
   var TF_BOX_RE = /\[\s*\]\s*$/;
-  var LABEL_RE = /^\(?\s*([0-9]{1,2}|[A-Za-z]|[अ-ह])\s*[\)\.–—-]+\s*/;
+  // Roman numerals come first so "(iii)" is read whole instead of as "i".
+  var ROMAN = 'ii|iii|iv|vi|vii|viii|ix|xi|xii|II|III|IV|VI|VII|VIII|IX|XI|XII';
+  var LABEL_RE = new RegExp('^\\(?\\s*(' + ROMAN + '|[0-9]{1,2}|[A-Za-z]|[\\u0905-\\u0939])\\s*[\\)\\.\\u2013\\u2014-]+\\s*');
   var MATCH_KEYWORDS = /(match the following|match the|मिलान)/i;
+
+  // A heading that says the answers are to be ticked. Used as the licence to
+  // stack options that were typed one per line back onto a single row.
+  var MCQ_KEYWORDS = new RegExp(
+    '(tick|choose|select|circle|pick|mark)[^.\\u0964]{0,30}(correct|right|best|suitable|appropriate|option|answer)'
+    + '|correct (option|answer|one)'
+    + '|multiple[- ]choice'
+    + '|\\u0938\\u0939\\u0940\\s*(\\u0935\\u093F\\u0915\\u0932\\u094D\\u092A|\\u0909\\u0924\\u094D\\u0924\\u0930)'   // सही विकल्प / सही उत्तर
+    + '|\\u092C\\u0939\\u0941\\u0935\\u093F\\u0915\\u0932\\u094D\\u092A\\u0940', 'i');                                // बहुविकल्पीय
   var COLUMN_HEADER_RE = /(column|कॉलम|कॉलम)/i;
 
   /* ---------------------------------------------------------------- header */
@@ -89,10 +100,17 @@
     });
   }
 
+  /*
+   * The punctuation a label is typed with ("Sub:- English.") is trimmed off
+   * the value - except the last dot of an abbreviation, which is part of the
+   * subject's name: "G.K." must not come back as "G.K". An inner dot between
+   * two letters is what tells the two apart.
+   */
   function tidyValue(value) {
-    return PF.normalize.clean(value)
-      .replace(/^[-:.–\s]+/, '')
-      .replace(/[-:.–\s]+$/, '');
+    var text = PF.normalize.clean(value).replace(/^[-:.–\s]+/, '');
+    var trimmed = text.replace(/[-:.–\s]+$/, '');
+    if (/\.$/.test(text) && /[A-Za-z]\.[A-Za-z]/.test(text)) return trimmed + '.';
+    return trimmed;
   }
 
   /* -------------------------------------------------------------- question */
@@ -196,6 +214,126 @@
       }
     });
     return nodes;
+  }
+
+  /* ------------------------------------------------- options typed in a stack
+   *
+   * Options are just as often typed one below the other as side by side:
+   *
+   *     1. Which of these is the biggest?
+   *        (a) Elephant
+   *        (b) Ant
+   *        (c) Dog
+   *
+   * Read line by line that is three more items, and the paper comes out with
+   * one option per line - the opposite of what the layout is meant to do. So
+   * consecutive lines are stacked back onto one row, but only on strong
+   * evidence, because turning a list into options is not a reversible mistake:
+   * either every line in the run carries its own tick box, or the heading says
+   * the paper is to be ticked and the labels are a letter sequence starting at
+   * its first letter. Numbers are never enough on their own - "1. 2. 3." under
+   * a tick-the-option heading are the questions, not the choices.
+   */
+
+  var TRAILING_BOX_RE = /\s*\(\s*\)\s*$/;
+  var MAX_OPTION_CHARS = 45;
+  var MAX_OPTION_RUN = 8;
+  // Without a label to go on, a tick box is the only evidence there is, and a
+  // true/false statement carries one too. A choice is a few words; a statement
+  // is a sentence, so the unlabelled case is held to a much shorter line.
+  var MAX_BARE_OPTION_CHARS = 25;
+  var MAX_BARE_OPTION_WORDS = 4;
+  var TRUE_FALSE_KEYWORDS = /(true\s*(or|and|\/|,)\s*false|false\s*(or|\/)\s*true|सत्य|असत्य)/i;
+
+  function looksLikeOption(node, bare) {
+    if (!node || node.kind !== 'item' || node.box) return false;
+    var text = String(node.text || '').replace(TRAILING_BOX_RE, '').trim();
+    if (!text) return false;
+    if (!bare) return text.length <= MAX_OPTION_CHARS;
+    return text.length <= MAX_BARE_OPTION_CHARS && text.split(/\s+/).length <= MAX_BARE_OPTION_WORDS;
+  }
+
+  function isBoxed(node) {
+    return TRAILING_BOX_RE.test(String(node.text || ''));
+  }
+
+  /**
+   * The sequence a run of labels belongs to.
+   *
+   * "i" is both the ninth letter and the first roman numeral, and the label
+   * alone cannot say which; the line below it can, so "(i) (ii) (iii)" is read
+   * as roman rather than as a letter list that starts at the wrong place.
+   */
+  function sequenceFormat(first, second) {
+    var format = labelFormat(String(first || ''));
+    var next = labelFormat(String(second || ''));
+    if ((format === 'a' && next === 'r') || (format === 'A' && next === 'R')) return next;
+    return format;
+  }
+
+  /** How many nodes from `start` are the stacked options of one question. */
+  function optionRunLength(nodes, start, mcqHeading) {
+    if (!nodes[start] || nodes[start].kind !== 'item') return 0;
+
+    var boxed = isBoxed(nodes[start]);
+    var format = sequenceFormat(
+      nodes[start].label,
+      nodes[start + 1] && nodes[start + 1].kind === 'item' ? nodes[start + 1].label : ''
+    );
+    var lettered = format === 'a' || format === 'A' || format === 'r' || format === 'R'
+      || format === 'option-hi' || format === 'hindi-letter';
+
+    // A number is never evidence of a choice: "1. 2. 3." under a tick-the-
+    // option heading are the questions, and numbered lines with a box beside
+    // them are statements to be marked true or false.
+    if (format === 'd') return 0;
+    // Options with no label at all are only recognised by their boxes, and are
+    // held to a much shorter line to keep statements out.
+    var bare = !lettered;
+    if (!looksLikeOption(nodes[start], bare)) return 0;
+    if (!boxed && !(mcqHeading && lettered && labelPosition(String(nodes[start].label), format) === 0)) return 0;
+
+    var length = 1;
+    while (start + length < nodes.length && length < MAX_OPTION_RUN) {
+      var node = nodes[start + length];
+      if (!looksLikeOption(node, bare) || isBoxed(node) !== boxed) break;
+      if (lettered) {
+        if (labelFormat(String(node.label || '')) !== format) break;
+        if (labelPosition(String(node.label), format) !== length) break;
+      } else if (node.label && labelFormat(String(node.label))) {
+        break; // a labelled line among unlabelled ones is a different group
+      }
+      length++;
+    }
+    return length >= 2 ? length : 0;
+  }
+
+  function groupStackedOptions(nodes, heading) {
+    // "Write true or false" is a question whose every line carries a box. None
+    // of them is a choice, so nothing in it is ever stacked.
+    if (TRUE_FALSE_KEYWORDS.test(heading || '')) return nodes;
+
+    var mcqHeading = MCQ_KEYWORDS.test(heading || '');
+    var grouped = [];
+    var index = 0;
+
+    while (index < nodes.length) {
+      var run = optionRunLength(nodes, index, mcqHeading);
+      if (!run) {
+        grouped.push(nodes[index]);
+        index++;
+        continue;
+      }
+      grouped.push({
+        kind: 'options',
+        autoFmt: nodes[index].autoFmt,
+        options: nodes.slice(index, index + run).map(function (node) {
+          return { label: node.label, text: String(node.text).replace(TRAILING_BOX_RE, '').trim() };
+        })
+      });
+      index += run;
+    }
+    return grouped;
   }
 
   /* ------------------------------------------------------- column splitting
@@ -311,9 +449,15 @@
     return String(index + 1);
   }
 
+  var ROMAN_SEQUENCE = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'];
+
   /** The kind of sequence a label belongs to, or null if it is not one we count. */
   function labelFormat(label) {
     if (/^\d{1,2}$/.test(label)) return 'd';
+    // A multi-letter roman numeral can only be roman; a lone "i" or "v" is
+    // ambiguous and stays with the letter sequence it also belongs to.
+    if (ROMAN_SEQUENCE.indexOf(String(label)) > 0) return 'r';
+    if (ROMAN_SEQUENCE.indexOf(String(label).toLowerCase()) > 0) return 'R';
     if (/^[a-z]$/.test(label)) return 'a';
     if (/^[A-Z]$/.test(label)) return 'A';
     if (HINDI_OPTION_LETTERS.indexOf(label) >= 0) return 'option-hi';
@@ -324,6 +468,8 @@
   /** Position of a label within its sequence: "1"/"a" -> 0, "2"/"b" -> 1, ... */
   function labelPosition(label, format) {
     if (format === 'd') return parseInt(label, 10) - 1;
+    if (format === 'r') return ROMAN_SEQUENCE.indexOf(String(label));
+    if (format === 'R') return ROMAN_SEQUENCE.indexOf(String(label).toLowerCase());
     if (format === 'a') return label.charCodeAt(0) - 97;
     if (format === 'A') return label.charCodeAt(0) - 65;
     if (format === 'option-hi') return HINDI_OPTION_LETTERS.indexOf(label);
@@ -414,7 +560,7 @@
 
   function buildQuestion(raw, ctx) {
     var heading = polishHeading(raw.heading, ctx);
-    var nodes = toRawNodes(raw.bodyLines);
+    var nodes = groupStackedOptions(toRawNodes(raw.bodyLines), raw.heading);
     var kind = classify(raw.heading, nodes);
 
     var question = {

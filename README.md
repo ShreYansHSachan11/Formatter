@@ -12,10 +12,52 @@ nothing to install.
 1. Double-click **index.html** (it opens in Chrome/Edge — no internet needed).
 2. Drop in a `.docx` or `.txt` file, or paste the paper as text.
 3. Check the subject/class boxes on the left, and tick any wording suggestions.
-4. Click **Download Word file**, or **Copy text** to paste into your own document.
+4. Correct anything that still needs a human eye: **Edit the paper**, then click
+   the line and retype it.
+5. Click **Download Word file**, or **Copy text** to paste into your own document.
 
 The preview on the right is a true-to-size A4 page, so what you see is what the
 Word file will look like.
+
+## Correcting a line by hand
+
+However good the rules are, one line in a paper will always need a person to
+fix it. **Edit the paper** turns the preview into something you can type in:
+click any line — a question, an option, a column of a match, a header field —
+and correct it. Enter keeps the change, Esc cancels it, and emptying a line
+deletes it. **Undo all edits** puts everything back.
+
+What you type is not pasted over the finished page. It is stored against the
+line it belongs to and fed back through the formatter, so the options are
+re-packed around the new words and the page count is measured from them — and
+the Word file, the copied text and the preview cannot drift apart. A header
+line you edit goes back into its box on the left rather than becoming an
+override, so the two never disagree.
+
+Edits are keyed to the question and item they came from, not to a position on
+the page, so they survive a change of spacing, font or page limit. Loading a
+different paper clears them.
+
+## Options typed one below the other
+
+Options are just as often typed in a stack as side by side:
+
+    1. Which of these is the biggest animal?
+    (a) Elephant
+    (b) Ant
+    (c) Dog
+
+Read line by line that is three more items, and the paper comes back with one
+option per line. They are stacked back onto a single row, but only on strong
+evidence, because turning a list into options is not a harmless mistake:
+either every line in the run carries its own tick box, or the heading says the
+paper is to be ticked *and* the labels are a letter sequence starting at its
+first letter. Numbers never count on their own — "1. 2. 3." under a
+tick-the-option heading are the questions, not the choices. A lettered list
+under "Answer the following questions" stays one answer per line, and so do the
+statements of a "Write true or false" question, which carry a box each without
+any of them being a choice. `tests/fixtures/stacked-options.txt` holds every
+one of those cases; take the guards out and it fails.
 
 ## What it does to the paper
 
@@ -26,7 +68,7 @@ Word file will look like.
 | Bold questions | The question line is bold; everything inside it is normal weight. |
 | No blank lines | Questions are separated by a small typographic gap (2–7 pt) instead of empty lines. Tick **No gap between questions** for none at all. |
 | Two pages | The paper is measured and the spacing is tightened automatically until it fits. If even the tightest setting needs three pages, you are told rather than silently given a third page. |
-| Options in a row | Tick-box options are laid out horizontally on one line at equal tab stops. If they are too wide for one line, they wrap to evenly spaced rows. |
+| Options in a row | Tick-box options are laid out horizontally on one line, whether they were typed side by side or one below the other. Each column is measured separately, so one long choice no longer pushes the rest onto their own lines. If they genuinely will not fit, they wrap to evenly filled rows. |
 | Short answers in a row | One-word items (word meanings, opposites, plurals, spellings, word pairs) are packed several per line instead of one line each. How many fit is measured from the widest item, so bare words sit five across and items with a blank to fill sit two or three across. |
 | Match the following | Two columns at a fixed tab stop, at least a third of the page wide, so they never look cramped. A question only becomes a match when it really is one — see below. |
 | Language fixes | Mechanical fixes are applied automatically; anything that could change meaning is offered as a tick-box suggestion. |
@@ -172,6 +214,10 @@ or individually:
 
 `tests/fixtures/loose-spacing.txt` is a paper typed with double spaces
 everywhere — the case that used to break the parser. Keep it in the suite.
+
+`tests/check-app.js` also drives the editing: it retypes a question in the
+preview, moves a header line into its box, deletes a line by emptying it, and
+checks that all three come out in the copied text.
 
 `tests/build-docx.js` leaves `out/english.docx` and `out/hindi.docx` behind —
 open them in Word to see the result.

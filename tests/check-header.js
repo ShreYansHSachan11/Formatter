@@ -50,6 +50,12 @@ var CASES = [
     expect: { school: 'S.S. ACADEMY KOIRAUNA BHADOHI', subject: 'Hindi', className: '5th', time: '2:30', maxMarks: '50' }
   },
   {
+    name: 'an abbreviated subject keeps its last dot',
+    lines: ['S.S. ACADEMY KOIRAUNA BHADOHI', 'Half yearly examination 2026-27', 'Sub:- G.K.',
+      'Time- 2:30 Class:- 4th M.M. 50'],
+    expect: { school: 'S.S. ACADEMY KOIRAUNA BHADOHI', subject: 'G.K.', className: '4th', time: '2:30', maxMarks: '50' }
+  },
+  {
     name: 'saint schools keep their usual abbreviation',
     lines: ['ST JOSEPH SCHOOL', 'Half yearly examination 2026-27', 'Sub:- English',
       'Time- 2:30 Class:- 3rd M.M. 50'],
