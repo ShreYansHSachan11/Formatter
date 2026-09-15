@@ -34,8 +34,16 @@ and correct it.
 | Esc | puts the line back as it was |
 | Tab / ↑ ↓ | move to the next line |
 
-Emptying a line deletes it, and a line you add and then leave empty goes away
-by itself. **Undo all edits** puts the whole paper back.
+Emptying a line deletes it, Delete at the end of one pulls the line below up
+into it, and a line you add and then leave empty goes away by itself. **Undo
+all edits** puts the whole paper back.
+
+Editing in the preview corrects the paper that was read. To change its
+structure — add a question, split one in two, move one — rewrite the text
+itself: the paper is left in **Paste or rewrite the paper as text** on the
+left, and formatting it again runs the whole thing through the parser from the
+beginning. That also clears the lines corrected in the preview, and says so
+when it does.
 
 What you type is not pasted over the finished page. It is stored against the
 line it belongs to and fed back through the formatter, so the options are

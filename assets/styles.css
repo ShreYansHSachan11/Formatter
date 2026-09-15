@@ -127,9 +127,12 @@ textarea { font-family: Consolas, "Courier New", monospace; font-size: 12.5px; r
 .btn:hover:not(:disabled) { border-color: #c8d0d8; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 
+/* Soft comes first so that a button which is both - one that turns primary
+   while it is on - is not left with white text on a pale background. */
+.btn-soft { background: #f6f8fa; }
+
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-dark); border-color: var(--accent-dark); }
-.btn-soft { background: #f6f8fa; }
 
 .link {
   border: 0; background: none; padding: 0;
@@ -192,7 +195,9 @@ details summary { cursor: pointer; font-size: 12.5px; color: var(--accent); marg
   flex-wrap: wrap;
 }
 
-.preview-bar #editStatus { margin-right: auto; }
+/* The hint is the part that gives way: it wraps inside the bar rather than
+   running off the end of it. */
+.preview-bar #editStatus { flex: 1 1 220px; min-width: 0; }
 
 .preview-note {
   margin-bottom: 10px;

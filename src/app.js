@@ -92,7 +92,12 @@
     el.pasteBtn.addEventListener('click', function () {
       var text = el.pasteArea.value.trim();
       if (!text) return toast('Paste the paper text first');
+
+      // Formatting again starts from the text, so anything corrected in the
+      // preview is gone. Say so rather than let it vanish quietly.
+      var hadEdits = Object.keys(state.edits).length + Object.keys(state.inserts).length;
       loadText(text, 'pasted text');
+      if (hadEdits) toast('Formatted again from the text - the lines edited by hand are gone');
     });
 
     Array.prototype.forEach.call(document.querySelectorAll('[data-sample]'), function (button) {
@@ -145,6 +150,13 @@
     state.edits = {};
     state.inserts = {};
     state.sourceName = source || 'paper';
+
+    // The paper as it was read, in the box it can be re-typed in. Editing in
+    // the preview corrects the lines of the paper that was found; rewriting it
+    // here is how a question is added, split apart or moved - the text goes
+    // back through the parser from the beginning.
+    el.pasteArea.value = state.raw;
+
     refresh({ resetHeaderInputs: true });
   }
 
@@ -337,7 +349,9 @@
       var next = editableTarget(event.relatedTarget);
       if (next) pendingFocus = { key: next.getAttribute('data-edit-key'), caret: caretOffset(next) };
 
-      commitEdit(node);
+      // Nothing was rebuilt, so the focus the browser has just moved is the
+      // right one and must be left where it is.
+      if (!commitEdit(node)) pendingFocus = null;
     });
 
     el.preview.addEventListener('keydown', onEditKey);
@@ -382,20 +396,35 @@
     }
 
     if (event.key === 'Backspace' && caretOffset(node) === 0 && !hasSelection()) {
-      var previous = neighbour(node, -1);
+      var previous = lineNeighbour(node, -1);
       if (!previous) return;                  // the first line has nothing to join
       event.preventDefault();
-      joinWithPrevious(node, key, previous);
+      join(previous, node);
+      return;
+    }
+
+    if (event.key === 'Delete' && caretOffset(node) === node.textContent.length && !hasSelection()) {
+      var following = lineNeighbour(node, 1);
+      if (!following) return;
+      event.preventDefault();
+      join(node, following);
       return;
     }
 
     if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-      var target = neighbour(node, event.key === 'ArrowUp' ? -1 : 1);
+      var at = caretOffset(node);
+      var up = event.key === 'ArrowUp';
+      // A long line wraps, and the browser walks the cursor through its visual
+      // rows. Only at the ends of the text does the cursor need to leave.
+      if (at !== null && (up ? at > 0 : at < node.textContent.length)) return;
+
+      var target = neighbour(node, up ? -1 : 1);
       if (!target) return;
       event.preventDefault();
-      pendingFocus = { key: target.getAttribute('data-edit-key'), caret: null };
-      commitEdit(node);                       // may rebuild the page
-      if (pendingFocus) applyPendingFocus();  // ... and if it did not, move now
+      pendingFocus = { key: target.getAttribute('data-edit-key'), caret: up ? target.textContent.length : 0 };
+      // Committing may rebuild the page and land the cursor itself; if it had
+      // nothing to save, the move still has to happen.
+      if (!commitEdit(node)) applyPendingFocus();
     }
   }
 
@@ -419,17 +448,17 @@
   }
 
   /**
-   * Backspace at the start of a line: its words go onto the line above and the
-   * line itself goes away - the same gesture as in any editor.
+   * Backspace at the start of a line, or Delete at the end of one: the two
+   * lines become one, the same gesture as in any editor.
    */
-  function joinWithPrevious(node, key, previous) {
-    var text = PF.normalize.clean(node.textContent);
-    var previousKey = previous.getAttribute('data-edit-key');
-    var joined = PF.normalize.clean(previous.textContent + (text ? ' ' + text : ''));
+  function join(first, second) {
+    var firstKey = first.getAttribute('data-edit-key');
+    var tail = PF.normalize.clean(second.textContent);
+    var joined = PF.normalize.clean(first.textContent + (tail ? ' ' + tail : ''));
 
-    removeLine(key);
-    setText(previousKey, joined);
-    pendingFocus = { key: previousKey, caret: previous.textContent.length };
+    removeLine(second.getAttribute('data-edit-key'));
+    setText(firstKey, joined);
+    pendingFocus = { key: firstKey, caret: first.textContent.length };
     rebuild();
   }
 
@@ -490,8 +519,9 @@
     return moved;
   }
 
+  /** Saves what is in a line. True when that rebuilt the page. */
   function commitEdit(node) {
-    if (suppressCommit) return;
+    if (suppressCommit) return false;
     var key = node.getAttribute('data-edit-key');
     var text = PF.normalize.clean(node.textContent);
 
@@ -499,16 +529,15 @@
     // blank line: it goes away rather than being carried into the document.
     if (!text && splitKey(key).index >= 0) {
       removeLine(key);
-      return rebuild();
+      rebuild();
+      return true;
     }
 
-    if (text === PF.normalize.clean(node.getAttribute('data-edit-before') || '')) {
-      pendingFocus = null; // nothing is being rebuilt, so nothing to put back
-      return;
-    }
+    if (text === PF.normalize.clean(node.getAttribute('data-edit-before') || '')) return false;
 
     setText(key, text);
     rebuild();
+    return true;
   }
 
   /* --- where a line's text lives ---------------------------------------- */
@@ -570,6 +599,18 @@
   function neighbour(node, step) {
     var nodes = editableNodes();
     return nodes[nodes.indexOf(node) + step] || null;
+  }
+
+  /**
+   * The next line in reading order, skipping the marks in the margin.
+   *
+   * The marks sit after the question in the page but beside it on the line, so
+   * joining a line to "the one above" must not pour its words into "(5)".
+   */
+  function lineNeighbour(node, step) {
+    var next = neighbour(node, step);
+    while (next && next.classList.contains('pv-right')) next = neighbour(next, step);
+    return next;
   }
 
   function blockKeyOf(node) {
@@ -662,6 +703,7 @@
     el.editToggle.textContent = state.editing ? 'Done editing' : 'Edit the paper';
     el.editToggle.setAttribute('aria-pressed', state.editing ? 'true' : 'false');
     el.editToggle.classList.toggle('btn-primary', state.editing);
+    el.editToggle.classList.toggle('btn-soft', !state.editing);
     applyEditing();
     renderEditStatus();
   }
