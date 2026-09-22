@@ -108,8 +108,9 @@ var CASES = [
   {
     name: 'hindi-wrapped fixture (a paper whose lines were broken by hand)',
     text: fs.readFileSync(path.join(__dirname, 'fixtures', 'hindi-wrapped.txt'), 'utf8'),
-    kinds: ['list', 'mcq', 'list', 'list', 'list', 'plain', 'list', 'plain', 'list', 'inline', 'list'],
-    marks: ['', '1x5', '1x5', '1x5', '2x5', '1x2', '1x5', '', '1x3', '1x5', '1x2'],
+    kinds: ['list', 'mcq', 'list', 'list', 'list', 'plain', 'list', 'plain', 'list', 'inline',
+      'list', 'list'],
+    marks: ['1x2', '1x5', '1x5', '1x5', '2x5', '1x2', '1x5', '', '1x3', '1x5', '1x2', '1x2'],
     maxPages: 3,
     // Every line here that was broken in the middle is put back together: the
     // rest of a statement, the rest of a word list, the rest of an option and
@@ -117,6 +118,14 @@ var CASES = [
     // brackets is still that label, and a Hindi instruction keeps its own
     // punctuation instead of being given a colon.
     lines: [
+      // Four lines of verse, quoted rather than listed: the heading keeps its
+      // own line and its marks, and the poem is left exactly as it was typed -
+      // not run together, and not numbered 1 to 4. Its lines end with the
+      // vertical bar and the double danda a keyboard without a danda produces.
+      /^\s*प्रश्न 1\. निम्नलिखित पदो का संदर्भ सहित व्याख्या कीजिए \|\t\(1x2\)$/m,
+      /^\s*कंफूका गुरु जगत का राम मिलावन और \|$/m,
+      /^\s*सो सतगुरु को जानिए, मुक्ति दिखावन ठौर ॥।$/m,
+      /^\s*और काज उनकु नही, द्रव्य कमावन हेता॥$/m,
       /^\s*\(ख\) सिरभाव किसी भी _+ के बिना पानी की ठीक जगह बताते थे।$/m,
       /^\s*खिदमत, ज्ञात, सूम, प्रलय, संयोग, प्रचुर, शुक्राचार्य, लवण शाश्वत, तूलिका$/m,
       /^\s*\(ग\) चित्रकार की खबर लेने के लिए राजा ने कितने समय पश्चात अहलकार को भेजा\?$/m,
@@ -131,11 +140,17 @@ var CASES = [
       // ending in the middle of a sentence. A line with a blank in it is an
       // item however it is punctuated, so these two must stay two.
       /^\s*1\. मोहन प्रतिदिन विद्यालय जाता है और वहाँ _+ पढ़ता$/m,
-      /^\s*2\. सीता अपनी माता के साथ बाज़ार _+ जाती है।$/m
+      /^\s*2\. सीता अपनी माता के साथ बाज़ार _+ जाती है।$/m,
+      // Verse usually has no stop at the end of a line at all, which is
+      // exactly what makes a line look unfinished. A quoted poem is left
+      // alone whatever its punctuation.
+      /^\s*हिमालय के आँगन में उसे प्रथम किरणों का दे उपहार$/m,
+      /^\s*उषा ने हँस अभिवादन किया और पहनाया हीरक हार$/m
     ],
     // Nothing in a Hindi paper is given a colon it was not typed with, and no
     // question mark is invented for a sentence that is not asking anything.
-    absent: [/।:/, /:$/m, /बताते\?/, /पश्चात\?/]
+    absent: [/।:/, /:$/m, /बताते\?/, /पश्चात\?/,
+      /\d\. कंफूका/, /कीजिए \| कंफूका/]
   },
   {
     name: 'letter-spaced fixture (words written out letter by letter)',

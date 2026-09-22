@@ -72,7 +72,34 @@
    */
   var LABEL_RE = ws('^\\(?\\s*(' + ROMAN + '|[0-9]{1,2}|[A-Za-z]|[\\u0905-\\u0939])'
     + '\\s*[\\u0964,]?\\s*[\\)\\.\\u2013\\u2014-]+\\s*');
+  /*
+   * Where a sentence stops.
+   *
+   * Hindi ends a line with the danda, and a keyboard without one is why the
+   * same paper ends its lines with "।", with "॥" and with the vertical bar.
+   * Knowing only the first of the three read four lines of verse as one
+   * unfinished sentence and ran three of them into the question's heading.
+   */
+  var STOP = '[.?!:\\u0964\\u0965|]';
+
   var MATCH_KEYWORDS = /(match the following|match the|मिलान)/i;
+
+  /*
+   * A question that quotes something and asks about it: a couplet, a stanza, a
+   * passage. What it quotes is not a list of items - it is not the paper's
+   * business to number the lines of a poem, and the lines are left exactly as
+   * they were typed, one per line.
+   */
+  var QUOTED_KEYWORDS = new RegExp(
+    '\\u092A\\u0926\\u094D\\u092F\\u093E\\u0902\\u0936'                       // पद्यांश
+    + '|\\u0917\\u0926\\u094D\\u092F\\u093E\\u0902\\u0936'                    // गद्यांश
+    + '|\\u092A\\u0926\\u094B\\u0902?'                                        // पदो / पदों
+    + '|\\u092A\\u0902\\u0915\\u094D\\u0924\\u093F'                           // पंक्ति
+    + '|\\u0926\\u094B\\u0939[\\u093E\\u0947]'                                // दोहा / दोहे
+    + '|\\u091A\\u094C\\u092A\\u093E\\u0908'                                  // चौपाई
+    + '|\\u0936\\u094D\\u0932\\u094B\\u0915'                                  // श्लोक
+    + '|\\u091B\\u0902\\u0926'                                                // छंद
+    + '|verse|stanza|couplet|extract', 'i');
 
   // A heading that says the answers are to be ticked. Used as the licence to
   // stack options that were typed one per line back onto a single row.
@@ -445,7 +472,7 @@
    */
 
   // A line ends here, and whatever follows it is something new.
-  var FINISHED_RE = ws('(?:[.?!:।]|\\(\\s*\\)|\\[\\s*\\]|_{2,}|\\)|\\])\\s*$');
+  var FINISHED_RE = ws('(?:' + STOP + '|\\(\\s*\\)|\\[\\s*\\]|_{2,}|\\)|\\])\\s*$');
   var BLANK_RE = /_{2,}/;
   // The text column of an A4 page, near enough: a line has to have reached a
   // good way across it to have been broken by it.
@@ -532,7 +559,14 @@
       return PF.normalize.AUTO_LABEL_RE.test(line);
     });
 
-    joinWrappedLines(bodyLines, ctx).forEach(function (rawLine) {
+    // Lines of verse are typed one per line on purpose, so in a question that
+    // quotes them nothing is run together - a poem has no lines that ran out
+    // of room, only lines that end where the poet ended them.
+    var lines = QUOTED_KEYWORDS.test(heading || '')
+      ? bodyLines
+      : joinWrappedLines(bodyLines, ctx);
+
+    lines.forEach(function (rawLine) {
       // A line Word numbered automatically carries a marker instead of a
       // visible number; the number itself is assigned later, per question.
       var line = rawLine;
@@ -671,7 +705,7 @@
   // A choice is a few words, not a sentence, and never has a blank in it: a
   // line with a blank is a line to be written on.
   var BLANK_IN_LINE_RE = ws('(_{3,}|\\[\\s*\\])');
-  var SENTENCE_TAIL_RE = ws('[?।]\\s*$');
+  var SENTENCE_TAIL_RE = ws('[?\\u0964\\u0965|]\\s*$');
 
   function looksLikeOption(node, bare) {
     if (!node || node.kind !== 'item' || node.box) return false;
@@ -805,7 +839,7 @@
    */
 
   var BLANK_OR_BOX_RE = ws('(_{3,}|\\(\\s*\\)|\\[\\s*\\])');
-  var SENTENCE_END_RE = ws('[?.!।]\\s*$');
+  var SENTENCE_END_RE = ws(STOP + '\\s*$');
   var MAX_PAIR_CHARS = 40;
   var MAX_PAIR_WORDS = 5;
 
@@ -1232,10 +1266,22 @@
       return question;
     }
 
+    /*
+     * The lines of the poem a question is asking about are quoted, not listed.
+     * "निम्नलिखित पदो का संदर्भ सहित व्याख्या कीजिए" is followed by four lines of
+     * verse, and numbering them 1 to 4 turns a couplet into a list of tasks.
+     * They are marked as lead-in lines: kept exactly where they are, and left
+     * out of the counting. Only where nothing in the question was labelled -
+     * a typed label is the teacher saying these are items after all.
+     */
+    var quoted = QUOTED_KEYWORDS.test(raw.heading || '')
+      && nodes.length > 1
+      && nodes.every(function (node) { return !node.label && !node.autoFmt; });
+
     question.items = nodes.map(function (node) {
       var text = node.text.replace(PF.normalize.SEP_RE, ' ');
       return {
-        label: node.label, autoFmt: node.autoFmt, lead: !!node.lead,
+        label: node.label, autoFmt: node.autoFmt, lead: quoted || !!node.lead,
         text: polish(text, ctx), box: !!node.box
       };
     });
@@ -1300,7 +1346,7 @@
      * "व्याख्या कीजिए ।:" is a colon added to a sentence that had already ended.
      */
     if (PF.text.hasDevanagari(out)) return out;
-    if (!/[?:।]$/.test(out)) out += ':';
+    if (!/[?:।॥|]$/.test(out)) out += ':';
     return out;
   }
 
@@ -1358,12 +1404,20 @@
    */
   function liftStrayMarks(raw) {
     if (raw.marks || !raw.bodyLines.length) return;
-    var first = raw.bodyLines[0];
-    var match = PF.normalize.clean(first).match(MARKS_RE);
-    if (!match) return;
-    raw.marks = tidyMarks(match[1]);
-    raw.bodyLines[0] = first.replace(MARKS_RE, '').trim(); // the same pattern, not a copy of it
-    if (!raw.bodyLines[0]) raw.bodyLines.shift();
+
+    // Anywhere in the question, not only on the line below the heading: in a
+    // question that quotes four lines of verse, the marks were typed at the
+    // end of the third of them.
+    for (var i = 0; i < raw.bodyLines.length; i++) {
+      var line = raw.bodyLines[i];
+      var match = PF.normalize.clean(line).match(MARKS_RE);
+      if (!match) continue;
+
+      raw.marks = tidyMarks(match[1]);
+      raw.bodyLines[i] = line.replace(MARKS_RE, '').trim(); // the same pattern, not a copy
+      if (!raw.bodyLines[i]) raw.bodyLines.splice(i, 1);
+      return;
+    }
   }
 
   PF.parser = {

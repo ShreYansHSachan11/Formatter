@@ -171,6 +171,35 @@ heading has one further piece of evidence — the marks. A heading whose marks
 are sitting at the end of the line below it was broken in two, however far
 across the page it happened to reach.
 
+### What a question quotes is not a list
+
+    प्रश्न 1  निम्नलिखित पदो का संदर्भ सहित व्याख्या कीजिए |
+         कंफूका गुरु जगत का राम मिलावन और  |
+         सो सतगुरु को जानिए, मुक्ति दिखावन ठौर ॥।   (1X2)
+         गलियारे गुरु फिरत है, घर - घर कंठी देत |
+         और काज उनकु नही , द्रव्य कमावन हेता॥
+
+Those four lines are a poem the question is asking about. They are not items:
+numbering them 1 to 4 turns a couplet into a list of tasks, and running them
+together turns it into prose. So a heading that quotes something — पद्यांश,
+गद्यांश, पदों, पंक्ति, दोहा, चौपाई, श्लोक, छंद, verse, stanza, couplet, extract
+— keeps what follows exactly as it was typed, one line per line, out of the
+counting. Only where nothing in the question carries a typed label: a label is
+the teacher saying these are items after all.
+
+Verse is also where the "line that ran out of room" rule would do the most
+damage, because a line of poetry usually has no stop at the end of it — which
+is precisely what makes a line look unfinished. Nothing is folded inside a
+question that quotes.
+
+**Where a sentence stops.** Hindi ends a line with the danda, and a keyboard
+without one is why the same paper ends its lines with `।`, with `॥` and with
+the vertical bar `|`. Knowing only the first of the three read that whole poem
+as one unfinished sentence and ran three of its lines into the heading. And
+because the marks were typed at the end of the *third* line of the verse rather
+than the line below the heading, marks are now looked for anywhere in a
+question that has none.
+
 ### The sentinels are not whitespace
 
 `prepare()` replaces tabs and runs of spaces with sentinel characters, so the
@@ -430,8 +459,10 @@ everywhere — the case that used to break the parser. Keep it in the suite.
 broken lines and all: a statement split across two lines, a word list split
 across two lines, an option split across two lines, two headings split across
 two lines, labels with a danda or a comma inside their brackets, marks written
-as `(1x 5)`, and a question whose unlabelled items each hold a blank. Every
-line of it is asserted, so the folding rule cannot quietly grow or shrink.
+as `(1x 5)`, and a question whose unlabelled items each hold a blank. It also
+holds two questions that quote verse: one punctuated with vertical bars and
+double dandas, one with no punctuation at all. Every line of it is asserted,
+so the folding rule cannot quietly grow or shrink.
 
 `tests/check-app.js` also drives the editing: it retypes a question in the
 preview, moves a header line into its box, deletes a line by emptying it, and
