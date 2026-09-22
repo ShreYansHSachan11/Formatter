@@ -79,6 +79,30 @@ Object.keys(expected).forEach(function (file) {
   }
 });
 
+/* --- the paper prints as paper, not as a screenshot of the tool ---------- */
+
+/*
+ * Printing has no output this test can read, so what is checked is that the
+ * rules it depends on are there at all: an A4 page box with no margin of its
+ * own (the margins are inside the page, where the formatter put them), the
+ * on-screen scaling undone, the tool's own furniture hidden, and a page break
+ * between one sheet and the next.
+ */
+var css = fs.readFileSync(path.join(ROOT, 'assets', 'styles.css'), 'utf8');
+var printBlock = css.slice(css.indexOf('@media print'));
+
+check(/@page\s*\{[^}]*size:\s*A4[^}]*margin:\s*0/.test(css),
+  'the printed page should be A4 with no margin of its own');
+check(css.indexOf('@media print') >= 0, 'there is no print stylesheet');
+check(/\.topbar[^{]*\{[^}]*display:\s*none/.test(printBlock),
+  'printing should leave out the toolbar');
+check(/\.panel|\.preview-bar/.test(printBlock) && /display:\s*none/.test(printBlock),
+  'printing should leave out the controls and the preview bar');
+check(/\.preview-scale[^{]*\{[^}]*transform:\s*none/.test(printBlock),
+  'the preview is scaled down to fit its column on screen; printing must undo that');
+check(/page-break-before:\s*always|break-before:\s*page/.test(printBlock),
+  'each page of the paper should start a new sheet');
+
 /* --- report -------------------------------------------------------------- */
 
 if (failures.length) {

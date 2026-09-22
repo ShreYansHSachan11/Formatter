@@ -14,10 +14,21 @@ nothing to install.
 3. Check the subject/class boxes on the left, and tick any wording suggestions.
 4. Correct anything that still needs a human eye: **Edit the paper**, then click
    the line and retype it.
-5. Click **Download Word file**, or **Copy text** to paste into your own document.
+5. Click **Download Word file**, **Copy text** to paste into your own document,
+   or **Print** to send the paper straight to a printer.
 
 The preview on the right is a true-to-size A4 page, so what you see is what the
 Word file will look like.
+
+**Printing** needs no Word at all. The preview is already the paper, laid out
+in A4 pages at 96 pixels to the inch — which is exactly how a browser prints a
+CSS pixel — so Print hands those pages to the printer and the stylesheet hides
+everything that is the tool rather than the paper. The page box is given no
+margin of its own: the margins are inside the page, where the formatter put
+them, and adding the printer's on top would shrink the paper to fit and quietly
+change every measurement the layout was built on. Editing closes first, so no
+cursor or highlight is printed. In the print dialog, leave scaling at 100% and
+turn headers and footers off.
 
 ## Correcting a line by hand
 
@@ -197,8 +208,21 @@ numbering them 1 to 4 turns a couplet into a list of tasks, and running them
 together turns it into prose. So a heading that quotes something — पद्यांश,
 गद्यांश, पदों, पंक्ति, दोहा, चौपाई, श्लोक, छंद, verse, stanza, couplet, extract
 — keeps what follows exactly as it was typed, one line per line, out of the
-counting. Only where nothing in the question carries a typed label: a label is
-the teacher saying these are items after all.
+counting, and does not draw the first line of it into itself. Only where
+nothing in the question carries a typed label: a label is the teacher saying
+these are items after all.
+
+The heading is left out of the folding deliberately rather than by punctuation.
+This teacher's heading ends with a character we do not recognise as a stop at
+all, and a rule that depended on recognising it would pull the poem's opening
+line into the heading — which is exactly what happened.
+
+**Each of those names has to be a word of its own**, because a question
+mistaken for one that quotes loses the numbering of its items, which is worse
+than the fault the rule exists to fix. `verse` lives inside *reverse*,
+*universe* and *diverse*; `छंद` lives inside *स्वच्छंद*; `पदों` inside
+*विपदों*. `tests/check-integrity.js` holds all of those as ordinary questions
+whose items must still be numbered.
 
 Verse is also where the "line that ran out of room" rule would do the most
 damage, because a line of poetry usually has no stop at the end of it — which

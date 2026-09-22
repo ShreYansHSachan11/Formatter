@@ -109,9 +109,9 @@ var CASES = [
     name: 'hindi-wrapped fixture (a paper whose lines were broken by hand)',
     text: fs.readFileSync(path.join(__dirname, 'fixtures', 'hindi-wrapped.txt'), 'utf8'),
     kinds: ['list', 'mcq', 'list', 'list', 'list', 'plain', 'list', 'plain', 'list', 'inline',
-      'list', 'list', 'list'],
+      'list', 'list', 'list', 'list', 'list'],
     marks: ['1x2', '1x5', '1x5', '1x5', '2x5', '1x2', '1x5', '', '1x3', '1x5', '1x2', '1x2',
-      '1x2'],
+      '1x2', '1x2', '1x2'],
     maxPages: 3,
     // Every line here that was broken in the middle is put back together: the
     // rest of a statement, the rest of a word list, the rest of an option and
@@ -123,7 +123,10 @@ var CASES = [
       // own line and its marks, and the poem is left exactly as it was typed -
       // not run together, and not numbered 1 to 4. Its lines end with the
       // vertical bar and the double danda a keyboard without a danda produces.
-      /^\s*प्रश्न 1\. निम्नलिखित पदो का संदर्भ सहित व्याख्या कीजिए \|\t\(1x2\)$/m,
+      // The heading ends with no stop at all, as this teacher's does with a
+      // character nobody recognises as one. A quoted poem is left alone all
+      // the same: what a question quotes is not part of what it asks.
+      /^\s*प्रश्न 1\. निम्नलिखित पदो का संदर्भ सहित व्याख्या कीजिए\t\(1x2\)$/m,
       /^\s*कंफूका गुरु जगत का राम मिलावन और \|$/m,
       /^\s*सो सतगुरु को जानिए, मुक्ति दिखावन ठौर ॥।$/m,
       /^\s*और काज उनकु नही, द्रव्य कमावन हेता॥$/m,
@@ -155,7 +158,19 @@ var CASES = [
       // evidence that it continues is the marks at the end of the line below
       // it, which is why a heading is put back together before they are
       // lifted off it.
-      /^\s*प्रश्न 13\. विलोम शब्द लिखिए तथा वाक्य बनाइए\t\(1x2\)$/m
+      /^\s*प्रश्न 13\. विलोम शब्द लिखिए तथा वाक्य बनाइए\t\(1x2\)$/m,
+      // Three sentences, each ended with a different one of the characters a
+      // danda is typed with. A sentence that has ended is not continued.
+      /^\s*1\. मेरा विद्यालय बहुत सुंदर है और यहाँ के शिक्षक बहुत अच्छे हैं \|$/m,
+      /^\s*2\. यहाँ पढ़ाई के साथ खेलकूद पर भी ध्यान दिया जाता है ॥$/m,
+      /^\s*3\. इसलिए मुझे अपने विद्यालय पर गर्व है।$/m,
+      // A quoted poem under a heading that is both long and unpunctuated -
+      // every reason to fold, and the one reason not to: the line below a
+      // heading that says it is quoting is the poem, not the rest of the
+      // sentence.
+      /^\s*प्रश्न 15\. नीचे लिखी काव्य पंक्तियों का भाव अपने शब्दों में स्पष्ट कीजिए\t\(1x2\)$/m,
+      /^\s*चारु चंद्र की चंचल किरणें खेल रही हैं जल थल में$/m,
+      /^\s*स्वच्छ चांदनी बिछी हुई है अवनि और अंबर तल में$/m
     ],
     // Nothing in a Hindi paper is given a colon it was not typed with, and no
     // question mark is invented for a sentence that is not asking anything.
@@ -330,6 +345,49 @@ function run(testCase) {
 
 console.log('Content integrity');
 CASES.forEach(run);
+
+/*
+ * A question that quotes is the exception, so it has to stay the exception.
+ *
+ * Leaving a poem alone means not numbering it, and a question mistaken for one
+ * that quotes loses the numbering of its items - worse than the fault the rule
+ * exists to fix. "verse" lives inside "reverse", "universe" and "diverse", and
+ * "छंद" inside "स्वच्छंद".
+ */
+(function checkQuotingStaysRare() {
+  function itemsOf(lines) {
+    var prepared = PF.normalize.prepare(lines.join('\n'));
+    var paper = PF.parser.parse(prepared.lines, {
+      properNouns: {}, acceptedSuggestions: [], fontSizePt: 12
+    });
+    return paper.questions[0].items;
+  }
+
+  var ORDINARY = [
+    ['Que 1. Write the reverse of these words:', 'Big and small', 'Hot and cold'],
+    ['Que 1. The universe in your own words:', 'What is a star', 'What is a planet'],
+    ['प्रश्न 1. स्वच्छंद लेखन कीजिए।',
+      'मेरा विद्यालय बहुत सुंदर है।',
+      'मुझे पढ़ना बहुत पसंद है।']
+  ];
+
+  ORDINARY.forEach(function (lines) {
+    var items = itemsOf(lines);
+    var numbered = items.filter(function (item) { return item.label; }).length;
+    if (numbered !== items.length) {
+      fail('quoting stays rare', '"' + lines[0] + '" is an ordinary question and its '
+        + items.length + ' items should all be numbered, ' + numbered + ' were');
+    }
+  });
+
+  var POEM = itemsOf(['प्रश्न 1. निम्नलिखित दोहे का अर्थ लिखिए।',
+    'रहिमन धागा प्रेम का, मत तोरो चटकाय',
+    'टूटे पे फिर ना जुरे, जुरे गाँठ परि जाय']);
+  if (POEM.some(function (item) { return item.label; })) {
+    fail('quoting stays rare', 'the two lines of a doha should not be numbered');
+  }
+  console.log('  quoting - a poem is left alone, "reverse" and "स्वच्छंद" are not poems');
+})();
 
 /*
  * The header always looks like the same header.

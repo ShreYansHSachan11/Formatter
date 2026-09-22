@@ -304,3 +304,47 @@ details summary { cursor: pointer; font-size: 12.5px; color: var(--accent); marg
 .check input { width: auto; margin: 0; }
 /* Switched off while a spacing chosen for its gap is in force. */
 .check.disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* --- printing ------------------------------------------------------------
+ *
+ * The preview already lays the paper out in real A4 pages at 96px to the inch,
+ * which is exactly how a browser prints a CSS pixel - so printing is a matter
+ * of sending those pages to the paper and nothing else. The page boxes get no
+ * margin of their own: the margins are inside the page, where the formatter
+ * put them, and adding the printer's on top would shrink the paper to fit and
+ * quietly change every measurement the layout was built on.
+ */
+@page { size: A4; margin: 0; }
+
+@media print {
+  html, body { background: #fff; margin: 0; padding: 0; }
+
+  /* Everything that is the tool rather than the paper. */
+  .topbar, .panel, .preview-bar, .preview-note, .toast, .pv-badge { display: none !important; }
+
+  .layout { display: block; margin: 0; padding: 0; gap: 0; }
+  .preview-wrap { margin: 0; padding: 0; }
+
+  /* The on-screen preview is scaled down to fit its column; on paper it is
+     printed at its own size. */
+  .preview-scale { transform: none !important; width: auto !important; height: auto !important; }
+  .preview { display: block; gap: 0; }
+
+  .pv-page {
+    box-shadow: none;
+    border-radius: 0;
+    margin: 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pv-page + .pv-page { break-before: page; page-break-before: always; }
+
+  /* Nothing that marks a line as editable belongs on the printed paper. */
+  .preview.editing [data-edit-key],
+  .preview [data-edit-key].edited,
+  .preview.editing [data-edit-key]:focus {
+    background: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+}

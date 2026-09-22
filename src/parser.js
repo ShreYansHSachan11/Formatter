@@ -90,8 +90,17 @@
    * business to number the lines of a poem, and the lines are left exactly as
    * they were typed, one per line.
    */
+  /*
+   * Each name has to be a word of its own. "verse" lives inside "reverse",
+   * "universe" and "diverse", and "छंद" inside "स्वच्छंद" - and a question
+   * mistaken for one that quotes loses the numbering of its items, which is a
+   * good deal worse than the fault this rule exists to fix. A Devanagari
+   * letter is not a word character to a JavaScript regular expression, so the
+   * boundary in front is written out as "not a Devanagari letter".
+   */
   var QUOTED_KEYWORDS = new RegExp(
-    '\\u092A\\u0926\\u094D\\u092F\\u093E\\u0902\\u0936'                       // पद्यांश
+    '(?:^|[^\\u0900-\\u097F])(?:'
+    + '\\u092A\\u0926\\u094D\\u092F\\u093E\\u0902\\u0936'                     // पद्यांश
     + '|\\u0917\\u0926\\u094D\\u092F\\u093E\\u0902\\u0936'                    // गद्यांश
     + '|\\u092A\\u0926\\u094B\\u0902?'                                        // पदो / पदों
     + '|\\u092A\\u0902\\u0915\\u094D\\u0924\\u093F'                           // पंक्ति
@@ -99,7 +108,8 @@
     + '|\\u091A\\u094C\\u092A\\u093E\\u0908'                                  // चौपाई
     + '|\\u0936\\u094D\\u0932\\u094B\\u0915'                                  // श्लोक
     + '|\\u091B\\u0902\\u0926'                                                // छंद
-    + '|verse|stanza|couplet|extract', 'i');
+    + ')'
+    + '|\\b(?:verse|stanza|couplet|extract)\\b', 'i');
 
   // A heading that says the answers are to be ticked. Used as the licence to
   // stack options that were typed one per line back onto a single row.
@@ -523,8 +533,22 @@
    */
   function continuesHeading(heading, raw, ctx) {
     if (!couldContinue(heading, raw.bodyLines[0])) return false;
-    if (ranToTheEdge(heading, ctx)) return true;
-    return !raw.marks && MARKS_RE.test(PF.normalize.clean(raw.bodyLines[0]));
+
+    // The marks are the end of an instruction, so a line carrying them is the
+    // rest of the heading whatever else is true of it.
+    var carriesMarks = !raw.marks
+      && MARKS_RE.test(PF.normalize.clean(raw.bodyLines[0]));
+
+    /*
+     * What a question quotes is not part of what it asks. The first line of a
+     * poem is never the rest of the heading - and this must not depend on how
+     * the line above it was punctuated, because the danda is typed with any of
+     * half a dozen characters and a heading that ends with one nobody
+     * recognises would pull the poem's opening line into itself.
+     */
+    if (QUOTED_KEYWORDS.test(raw.heading || '')) return carriesMarks;
+
+    return ranToTheEdge(heading, ctx) || carriesMarks;
   }
 
   /**

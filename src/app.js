@@ -43,7 +43,7 @@
 
   function init() {
     [
-      'statusLine', 'copyBtn', 'downloadBtn', 'dropZone', 'browseBtn', 'fileInput',
+      'statusLine', 'copyBtn', 'downloadBtn', 'printBtn', 'dropZone', 'browseBtn', 'fileInput',
       'pasteArea', 'pasteBtn', 'preview', 'previewScale', 'previewNote', 'emptyState',
       'suggestions', 'autoFixSummary', 'autoFixDetails', 'autoFixList', 'toast',
       'editToggle', 'editStatus', 'resetEdits',
@@ -125,6 +125,7 @@
 
     el.copyBtn.addEventListener('click', copyText);
     el.downloadBtn.addEventListener('click', downloadDocx);
+    el.printBtn.addEventListener('click', printPaper);
     window.addEventListener('resize', scalePreview);
 
     el.editToggle.addEventListener('click', function () { setEditing(!state.editing); });
@@ -854,6 +855,7 @@
 
     el.copyBtn.disabled = false;
     el.downloadBtn.disabled = false;
+    el.printBtn.disabled = false;
     el.editToggle.disabled = !questions;
     // Nothing to correct means nothing to be in editing mode for.
     if (!questions && state.editing) setEditing(false);
@@ -886,6 +888,19 @@
     } catch (error) {
       toast('Could not create the Word file: ' + error.message);
     }
+  }
+
+  /*
+   * The preview is already the paper, laid out in A4 pages at 96 pixels to the
+   * inch - which is exactly how a browser prints a CSS pixel. So printing is
+   * the preview, with the stylesheet hiding everything that is the tool rather
+   * than the paper. Editing is closed first: a line being corrected is a line
+   * with a cursor and a highlight in it, and neither belongs on paper.
+   */
+  function printPaper() {
+    if (!state.result) return;
+    if (state.editing) setEditing(false);
+    window.print();
   }
 
   function copyText() {
