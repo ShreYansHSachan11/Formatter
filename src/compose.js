@@ -366,7 +366,7 @@
           type: 'pair',
           key: base + '.p' + index,
           cellKeys: pairKeys,
-          cells: [leftCells[index], pair.right].map(function (cell, i) {
+          cells: [leftCells[index], formatLabel(pair.rightLabel) + pair.right].map(function (cell, i) {
             return sanitize(edited(options, pairKeys[i], cell));
           }),
           cols: 2,

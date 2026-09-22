@@ -223,12 +223,22 @@
     });
   }
 
-  /** Keeps only fixes a person would care about; pure whitespace tidying is noise. */
+  /**
+   * Keeps only fixes a person would care about.
+   *
+   * Spacing is tidied on every line and every blank is drawn to one length, so
+   * listing those buries the handful of changes that are actually about the
+   * words - "38 spelling/punctuation fixes" of which two were spelling.
+   */
   function collectFixes(cleanupFixes, parserFixes) {
     var meaningful = cleanupFixes.filter(function (fix) {
-      return fix.before.replace(/\s/g, '') !== fix.after.replace(/\s/g, '');
+      return wording(fix.before) !== wording(fix.after);
     });
     return meaningful.concat(parserFixes || []);
+  }
+
+  function wording(text) {
+    return String(text).replace(/_+/g, '_').replace(/\s/g, '');
   }
 
   /* ---------------------------------------------------------------- render */

@@ -101,6 +101,41 @@ Word can number a list in two ways, and only one of them is visible in the text:
 - **automatic numbering** — the numbers live in `numbering.xml` and Word draws
   them. Read the text alone and every item number silently disappears.
 
+**What Word numbers is what the items are.** A numbered list carries one number
+per paragraph, so inside a question numbered that way, a line that arrives
+*without* a number is not an item that lost one. It is either the rest of the
+line above it — a line broken with Shift+Enter — or something that was never in
+the list at all, like the box of phrases above a "complete the sentences"
+question. Reading those as items is what turned one true/false statement into
+two, and numbered a box of phrases as question 1.
+
+The counting follows from the same fact: Word numbers the paragraphs it numbers,
+in document order, and nothing else on the page affects the count. So where some
+items carry Word's numbering and others were typed with a number of their own,
+the first group takes the positions 1, 2, 3… in order and the second keeps what
+it says.
+
+**Items typed two to a line** are read down the columns, the way they are meant
+to be read:
+
+    I.   Talk-        IV. Face-              becomes  I  Talk-    IV Face-
+    II.  Red-         V.  Fail-                       II Red-     V  Fail-
+    III. See-                                         III See-
+
+The gap between the two is a tab — the same character that separates the two
+columns of a matching question — so the split has to be earned: the second half
+must start a label of the same sequence, jumping a whole column ahead of the
+first ("I … IV", never "a … b"), and neither half may be long. A matching
+question is never split this way.
+
+**"I" is a letter and a roman numeral both.** Which one it is cannot be read off
+the label; it is read off the labels beside it. Where any label in the group is
+unmistakably roman — "IV", "ii" — the ambiguous ones are roman too. Getting this
+wrong makes a list of I, II, III, IV, V look like a jump from the ninth letter
+to the fourth numeral, and the numbering of the whole question is abandoned as
+inconsistent — which is exactly how a question came back with its first three
+numbers missing.
+
 Both are handled, in two layers. The reader resolves automatic numbering and
 keeps its format, so a lettered list stays lettered (a, b, c) and a numbered one
 stays numbered. On top of that the numbering of every group is completed: if no
@@ -145,6 +180,10 @@ numbering, `?` removed from instructions that are commands ("Write 8 line
 poems ?" → "Write 8 line poems:"), and names spelled inconsistently in the same
 paper (`ella` → `Ella`, but only when both spellings appear).
 
+A tick box counts as a tick box whichever brackets it is typed with, `( )` or
+`[ ]`. Reading only the round ones once turned a row of five options into five
+separate questions, one per option.
+
 **Suggested, never automatic** (each with a tick box and a reason):
 wording changes such as `felt tried` → `felt tired`, `doctor advice` →
 `doctor advises`, `brush is teeth` → `brush his teeth`, `did he had` →
@@ -153,6 +192,15 @@ nothing is changed until you tick it. Low-confidence ones start unticked.
 
 To add your own rules, edit `SUGGESTED` in [src/rules-language.js](src/rules-language.js).
 Nothing else needs to change.
+
+**A suggestion that arrives ticked is, in effect, an automatic change**, so how
+sure it is matters as much as what it says. The capital offered for a name is
+the case in point: "Who was inky?" makes *inky* a name, but the same rule read
+*trees* as one from "the name of trees planted in the school" and capitalised it
+across the whole paper — "The Princess was allowed to climb Trees". The paper
+decides: a word used anywhere else with nothing naming about it is an ordinary
+word, and its capital is offered unticked rather than applied.
+`tests/check-language.js` holds both cases.
 
 **Why the line is drawn there.** Prose rules assume prose, and a paper for young
 classes often is not: a word may be spaced out letter by letter, `C h a i r`.
@@ -224,6 +272,7 @@ or individually:
     node tests/check-integrity.js   # nothing lost, nothing split, nothing corrupted
     node tests/check-header.js      # the four header lines, however they were typed
     node tests/check-numbering.js   # .docx reading: numbering, content controls, tables
+    node tests/check-language.js    # what is fixed without asking, and what is only offered
     node tests/check-app.js         # drives the real page: load, preview, edit, copy, download
     node tests/check-ui.js          # ids, assets and modules all line up
     node tests/run-pipeline.js      # parse + fit a sample, print the structure
@@ -231,6 +280,11 @@ or individually:
     node tests/run-pipeline.js tests/fixtures/loose-spacing.txt
     node tests/build-docx.js        # write real .docx files to out/ and check the XML
     node tests/build-docx.js tests/fixtures/loose-spacing.txt
+
+`tests/check-numbering.js` also formats a whole paper built the way Word
+stores one - automatic numbering, a line broken with Shift+Enter, options in
+square boxes, items two to a line - because that combination is where four
+separate faults came from at once.
 
 `tests/fixtures/loose-spacing.txt` is a paper typed with double spaces
 everywhere — the case that used to break the parser. Keep it in the suite.

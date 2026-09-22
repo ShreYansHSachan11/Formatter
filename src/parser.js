@@ -28,8 +28,14 @@
   // Up to three digits: a section can be worth 100. Four would start matching
   // years, which belong to the paper's title rather than to its marks.
   var MARKS_RE = /[\(\[]\s*(\d{1,3})\s*[\)\]]\s*[\.\?:]*\s*$/;
-  var EMPTY_BOX_RE = /\(\s*\)/g;
+  // A tick box is a tick box whichever brackets it is typed with. Papers use
+  // "( )" and "[ ]" interchangeably, and reading only one of them turned a row
+  // of options into five separate questions.
+  var EMPTY_BOX_RE = /(?:\(\s*\)|\[\s*\])/g;
   var TF_BOX_RE = /\[\s*\]\s*$/;
+  // Items typed two to a line are short by nature ("I. Talk-"); a long half is
+  // prose that merely has a tab in it.
+  var MAX_TABBED_ITEM_CHARS = 45;
   // Roman numerals come first so "(iii)" is read whole instead of as "i".
   var ROMAN = 'ii|iii|iv|vi|vii|viii|ix|xi|xii|II|III|IV|VI|VII|VIII|IX|XI|XII';
   var LABEL_RE = new RegExp('^\\(?\\s*(' + ROMAN + '|[0-9]{1,2}|[A-Za-z]|[\\u0905-\\u0939])\\s*[\\)\\.\\u2013\\u2014-]+\\s*');
@@ -138,7 +144,7 @@
     var boxes = line.match(EMPTY_BOX_RE);
     if (!boxes || boxes.length < 2) return null;
 
-    var chunks = line.split(/\(\s*\)/);
+    var chunks = line.split(/(?:\(\s*\)|\[\s*\])/);
     var options = [];
     for (var i = 0; i < chunks.length; i++) {
       var chunk = chunks[i].replace(PF.normalize.SEP_RE, ' ').trim();
@@ -172,9 +178,90 @@
     return { label: m[1], rest: m[2].trim() };
   }
 
+  /**
+   * Two items typed side by side on one line:
+   *
+   *     I.  Talk-        IV. Face-
+   *     II. Red-         V.  Fail-
+   *
+   * The gap is a tab, the same character that separates the two columns of a
+   * matching question - so the split has to be earned. What earns it is the
+   * second half starting a label of the same sequence as the first: a matching
+   * question's right column is an answer, and answers are not numbered.
+   */
+  function splitTabbedItems(line, expectedFormat) {
+    var parts = line.split(PF.normalize.SEP_RE)
+      .map(function (part) { return part.trim(); })
+      .filter(Boolean);
+    if (parts.length < 2) return null;
+
+    var items = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].length > MAX_TABBED_ITEM_CHARS) return null;
+      var stripped = stripLabel(parts[i]);
+
+      if (i === 0) {
+        // The first half may carry Word's automatic numbering instead of a
+        // typed label, in which case the format is known from the marker.
+        items.push(stripped || { label: '', rest: parts[i] });
+        continue;
+      }
+      if (!stripped || !stripped.rest) return null;
+      var format = labelFormat(String(stripped.label));
+      if (!format || !sameSequence(format, expectedFormat, items)) return null;
+      // The second column carries on where the first one ends, so its number
+      // jumps ahead by a whole column: "I ... IV". Two labels that simply run
+      // on ("a ... b") are a list, or the two halves of a matching pair.
+      if (!continuesAcrossColumns(items[i - 1], stripped)) return null;
+      items.push(stripped);
+    }
+
+    return items.length >= 2 ? items.map(function (item) {
+      return { label: item.label, text: item.rest };
+    }) : null;
+  }
+
+  var MIN_COLUMN_JUMP = 2;
+
+  /**
+   * True when the second label is far enough ahead of the first to be the next
+   * column rather than the next item: a second column carries on where the
+   * first one ended, so it starts a whole column further down the sequence. A
+   * first half numbered by Word carries no label to compare with - the marker
+   * on it is evidence enough on its own.
+   */
+  function continuesAcrossColumns(previous, current) {
+    if (!previous || !previous.label) return true;
+    var formats = formatPair(previous.label, current.label);
+    if (!formats.first || !formats.second) return false;
+
+    var from = labelPosition(String(previous.label), formats.first);
+    var to = labelPosition(String(current.label), formats.second);
+    return from >= 0 && to - from >= MIN_COLUMN_JUMP;
+  }
+
+  /** The label of a second item on the line belongs to the first one's series. */
+  function sameSequence(format, expectedFormat, items) {
+    var first = items[0] && items[0].label ? formatPair(items[0].label, '').first : '';
+    var reference = expectedFormat || first;
+    if (!reference) return false;
+    if (reference === format) return true;
+    // "I" is a letter and a roman numeral both; "IV" beside it settles it.
+    return (reference === 'a' && format === 'r') || (reference === 'A' && format === 'R')
+      || (reference === 'r' && format === 'a') || (reference === 'R' && format === 'A');
+  }
+
   /** First pass: each body line becomes a raw node. */
-  function toRawNodes(bodyLines) {
+  function toRawNodes(bodyLines, heading) {
     var nodes = [];
+    var matching = MATCH_KEYWORDS.test(heading || '');
+    // Whether Word is doing the numbering for this question. If it is, every
+    // item it counts carries a marker, and the lines that do not are something
+    // else - see foldUnnumberedLines.
+    var numbering = bodyLines.some(function (line) {
+      return PF.normalize.AUTO_LABEL_RE.test(line);
+    });
+
     bodyLines.forEach(function (rawLine) {
       // A line Word numbered automatically carries a marker instead of a
       // visible number; the number itself is assigned later, per question.
@@ -206,14 +293,68 @@
         return;
       }
 
+      var tabbed = matching ? null : splitTabbedItems(plain, autoFmt);
+      if (tabbed) {
+        tabbed.forEach(function (item, index) {
+          nodes.push({
+            kind: 'item', label: item.label, text: item.text, box: box,
+            autoFmt: index === 0 ? autoFmt : ''
+          });
+        });
+        return;
+      }
+
       var stripped = stripLabel(plain);
       if (stripped) {
         nodes.push({ kind: 'item', label: stripped.label, text: stripped.rest, box: box, autoFmt: autoFmt });
       } else {
-        nodes.push({ kind: 'item', label: '', text: plain.trim(), box: box, autoFmt: autoFmt });
+        // No typed label and no marker, in a question Word is numbering: this
+        // line is not one of the items. foldUnnumberedLines says what it is.
+        nodes.push({
+          kind: 'item', label: '', text: plain.trim(), box: box, autoFmt: autoFmt,
+          unnumbered: numbering && !autoFmt
+        });
       }
     });
-    return nodes;
+
+    return numbering ? foldUnnumberedLines(nodes) : nodes;
+  }
+
+  /*
+   * What Word's numbering says about a line that has none.
+   *
+   * A numbered list in Word carries its numbers outside the text, one per
+   * paragraph. So inside a question whose lines are numbered that way, a line
+   * arriving without a number is not an item that lost its number - it is
+   * either a line broken with Shift+Enter, which is the rest of the item above
+   * it, or something that was never part of the list at all, such as the box of
+   * phrases above a "complete the sentences" question.
+   *
+   * Reading those as items is what turned one true/false statement into two and
+   * numbered the box of phrases as question 1.
+   */
+  function foldUnnumberedLines(nodes) {
+    var folded = [];
+
+    nodes.forEach(function (node) {
+      if (!node.unnumbered) {
+        delete node.unnumbered;
+        folded.push(node);
+        return;
+      }
+      delete node.unnumbered;
+
+      var previous = folded[folded.length - 1];
+      if (previous && previous.kind === 'item' && !previous.lead) {
+        previous.text = PF.text.collapseSpaces(previous.text + ' ' + node.text);
+        previous.box = previous.box || node.box;
+        return;
+      }
+      node.lead = true; // nothing above it to continue: a line of its own
+      folded.push(node);
+    });
+
+    return folded;
   }
 
   /* ------------------------------------------------- options typed in a stack
@@ -287,10 +428,32 @@
    * as roman rather than as a letter list that starts at the wrong place.
    */
   function sequenceFormat(first, second) {
-    var format = labelFormat(String(first || ''));
-    var next = labelFormat(String(second || ''));
-    if ((format === 'a' && next === 'r') || (format === 'A' && next === 'R')) return next;
-    return format;
+    return formatPair(first, second).first;
+  }
+
+  /**
+   * Reads two labels together, because one of them may not be readable alone.
+   *
+   * "I", "V" and "X" are letters and roman numerals both. Beside a label that
+   * can only be roman - "IV", "ii" - they are roman too, and every place that
+   * compares two labels has to agree about that, or one of them quietly counts
+   * "I" as the ninth letter and the sequence falls apart.
+   */
+  function formatPair(first, second) {
+    var a = labelFormat(String(first || ''));
+    var b = labelFormat(String(second || ''));
+    if (isRomanFormat(b) && isAmbiguousLetter(first)) a = b;
+    else if (isRomanFormat(a) && isAmbiguousLetter(second)) b = a;
+    return { first: a, second: b };
+  }
+
+  function isRomanFormat(format) {
+    return format === 'r' || format === 'R';
+  }
+
+  function isAmbiguousLetter(label) {
+    var text = String(label || '');
+    return text.length === 1 && ROMAN_SEQUENCE.indexOf(text.toLowerCase()) >= 0;
   }
 
   /** How many nodes from `start` are the stacked options of one question. */
@@ -509,15 +672,124 @@
    * the blank line is the continuation of item 1, not a missing item 2, and the
    * mismatch is what tells the two cases apart.
    */
+  /*
+   * "I", "V" and "X" are letters and roman numerals both, and which one they
+   * are cannot be read off the label itself - only off the company it keeps.
+   * A list running I, II, III, IV, V is roman throughout; read letter by letter
+   * it claims to jump from position 8 to position 3, the sequence looks broken,
+   * and the numbering of the whole question is abandoned. Where any label is
+   * unmistakably roman, the ambiguous ones are read as roman too.
+   */
+  function unifyRomanAnchors(anchors) {
+    var roman = anchors.filter(function (anchor) {
+      return anchor.format === 'r' || anchor.format === 'R';
+    })[0];
+    if (!roman) return;
+
+    anchors.forEach(function (anchor) {
+      if (anchor.format !== 'a' && anchor.format !== 'A') return;
+      if (ROMAN_SEQUENCE.indexOf(anchor.label.toLowerCase()) < 0) return;
+      anchor.format = roman.format;
+      anchor.position = labelPosition(anchor.label, anchor.format);
+    });
+  }
+
+  /*
+   * Numbers straight from Word's own counting.
+   *
+   * Word numbers the paragraphs it numbers, in document order - nothing else on
+   * the page affects the count. So where some items carry a marker and others
+   * were typed with a number of their own, the marked ones take the sequence
+   * positions 1, 2, 3... in the order they appear, and the typed ones keep what
+   * they say. Two items typed side by side on one line are read down the left
+   * column and then the right, which is how the numbers come out in the paper:
+   *
+   *     I.  Talk-    IV. Face-        I, II, III down the left,
+   *     II. Red-     V.  Fail-        IV and V down the right.
+   *     III. See-
+   *
+   * Counting by position in the list instead would give those five items the
+   * numbers I, IV, II, V, III.
+   */
+  function labelFromMarkers(entries) {
+    var marked = entries.filter(function (entry) { return !entry.label && entry.autoFmt; });
+    if (!marked.length) return false;
+
+    var format = marked[0].autoFmt;
+    if (!marked.every(function (entry) { return entry.autoFmt === format; })) return false;
+
+    var taken = {};
+    var typed = entries.filter(function (entry) { return entry.label; });
+    for (var i = 0; i < typed.length; i++) {
+      var typedFormat = labelFormat(String(typed[i].label));
+      if (!typedFormat || !sameSequence(typedFormat, format, [])) return false;
+      taken[labelPosition(String(typed[i].label), typedFormat)] = true;
+    }
+
+    // Every position has to be free, or the two ways of counting disagree and
+    // neither can be trusted.
+    for (var n = 0; n < marked.length; n++) if (taken[n]) return false;
+
+    marked.forEach(function (entry, index) {
+      entry.label = makeLabel(index, format);
+    });
+    return true;
+  }
+
+  /**
+   * Puts items back into the order their numbers claim.
+   *
+   * Items typed two to a line arrive down the page (I, IV, II, V, III); the
+   * numbers say what the order is. Only a complete, unbroken sequence is
+   * trusted - anything else is left exactly as it was found.
+   */
+  function orderByLabel(items) {
+    var counted = items.filter(function (item) { return !item.lead; });
+    if (counted.length < 2) return items;
+
+    var anchors = [];
+    for (var i = 0; i < counted.length; i++) {
+      var format = labelFormat(String(counted[i].label || ''));
+      if (!format) return items;
+      anchors.push({ index: i, format: format, label: String(counted[i].label), position: 0 });
+      anchors[i].position = labelPosition(anchors[i].label, format);
+    }
+
+    unifyRomanAnchors(anchors);
+    var first = anchors[0].format;
+    var seen = {};
+    var ordered = true;
+
+    for (var a = 0; a < anchors.length; a++) {
+      if (anchors[a].format !== first) return items;
+      if (anchors[a].position < 0 || seen[anchors[a].position]) return items;
+      seen[anchors[a].position] = true;
+      if (a > 0 && anchors[a].position < anchors[a - 1].position) ordered = false;
+    }
+    if (ordered) return items;
+
+    // A gap in the sequence means something is missing; moving what is left
+    // around would only make that harder to see.
+    var positions = anchors.map(function (anchor) { return anchor.position; }).sort(function (x, y) { return x - y; });
+    for (var p = 1; p < positions.length; p++) if (positions[p] !== positions[p - 1] + 1) return items;
+
+    var sorted = anchors.slice().sort(function (x, y) { return x.position - y.position; })
+      .map(function (anchor) { return counted[anchor.index]; });
+
+    var next = 0;
+    return items.map(function (item) { return item.lead ? item : sorted[next++]; });
+  }
+
   function fillLabelGaps(entries) {
     var anchors = [];
     entries.forEach(function (entry, index) {
       if (!entry.label) return;
       var format = labelFormat(String(entry.label));
-      if (format) anchors.push({ index: index, format: format, position: labelPosition(String(entry.label), format) });
+      if (format) anchors.push({ index: index, format: format, label: String(entry.label), position: labelPosition(String(entry.label), format) });
     });
     if (!anchors.length) return false;
 
+    unifyRomanAnchors(anchors);
     var format = anchors[0].format;
     var offset = anchors[0].position - anchors[0].index;
     var consistent = anchors.every(function (anchor) {
@@ -547,7 +819,9 @@
     if (!missing) return entries;
 
     if (missing < entries.length) {
-      fillLabelGaps(entries);
+      // Word's own count first, where it is available and agrees with the
+      // numbers already typed; the neighbours of a gap otherwise.
+      if (!labelFromMarkers(entries)) fillLabelGaps(entries);
       return entries;
     }
 
@@ -583,7 +857,7 @@
 
   function buildQuestion(raw, ctx) {
     var heading = polishHeading(raw.heading, ctx);
-    var nodes = groupStackedOptions(toRawNodes(raw.bodyLines), raw.heading);
+    var nodes = groupStackedOptions(toRawNodes(raw.bodyLines, raw.heading), raw.heading);
     var kind = classify(raw.heading, nodes);
 
     var question = {
@@ -649,7 +923,18 @@
         var cols = columnSplit(item.text, false);
         if (cols) {
           splitCount++;
-          pairs.push({ label: item.label, autoFmt: item.autoFmt, left: polish(cols.left, ctx), right: polish(cols.right, ctx) });
+          // The right column carries a label of its own ("b. Meow"), which is
+          // a label and not a word: polished as prose it came out capitalised,
+          // as "B. Meow". It is lifted off and put back by the same rule that
+          // formats every other label in the paper.
+          var answer = stripLabel(cols.right);
+          pairs.push({
+            label: item.label,
+            autoFmt: item.autoFmt,
+            left: polish(cols.left, ctx),
+            rightLabel: answer && answer.rest ? answer.label : '',
+            right: polish(answer && answer.rest ? answer.rest : cols.right, ctx)
+          });
         } else {
           var plain = { label: item.label, autoFmt: item.autoFmt, text: polish(item.text, ctx) };
           unsplit.push(plain);
@@ -673,16 +958,27 @@
       return question;
     }
 
-    question.items = ensureLabels(nodes.map(function (node) {
+    question.items = nodes.map(function (node) {
       var text = node.text.replace(PF.normalize.SEP_RE, ' ');
-      return { label: node.label, autoFmt: node.autoFmt, text: polish(text, ctx), box: !!node.box };
-    }), { script: scriptOf(question) });
+      return {
+        label: node.label, autoFmt: node.autoFmt, lead: !!node.lead,
+        text: polish(text, ctx), box: !!node.box
+      };
+    });
+
+    // A lead-in line - the box of phrases above "complete the sentences" - is
+    // not an item and must not take a number, or every item below it is out by
+    // one. It keeps its place in the list; it is only left out of the counting.
+    var counted = question.items.filter(function (item) { return !item.lead; });
+    ensureLabels(counted, { script: scriptOf(question) });
+    question.items = orderByLabel(question.items);
 
     if (!question.items.length) {
       question.kind = 'plain';
-    } else if (question.items.length >= 3 && question.items.every(function (item) {
-      return !item.box && isShortItem(item.text, ctx.fontSizePt);
-    })) {
+    } else if (counted.length === question.items.length
+      && question.items.length >= 3 && question.items.every(function (item) {
+        return !item.box && isShortItem(item.text, ctx.fontSizePt);
+      })) {
       question.kind = 'inline';
     }
     return question;
@@ -713,6 +1009,12 @@
       out = out.replace(/\?+\s*$/, '');
       ctx.fixes.push({ rule: 'instruction punctuation', before: PF.text.collapseSpaces(text), after: out + ':' });
     }
+    // A full stop at the end of an instruction is doing the job the colon is
+    // about to do, so it gives way to it: "Choose the correct option." becomes
+    // "Choose the correct option:", never "option.:". An abbreviation keeps its
+    // dot - the inner dot between two letters is what tells the two apart.
+    if (/\.\s*$/.test(out) && !/[A-Za-z]\.[A-Za-z]/.test(out)) out = out.replace(/\s*\.\s*$/, '');
+
     if (!/[?:।]$/.test(out)) out += ':';
     return out;
   }

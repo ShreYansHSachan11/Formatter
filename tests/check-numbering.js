@@ -63,6 +63,20 @@ function numbered(text, numId, level) {
     + '<w:r><w:t xml:space="preserve">' + text + '</w:t></w:r></w:p>';
 }
 
+/** A numbered paragraph broken over two lines with Shift+Enter, as Word stores it. */
+function numberedWithBreak(first, second, numId) {
+  return '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="' + numId + '"/></w:numPr></w:pPr>'
+    + '<w:r><w:t xml:space="preserve">' + first + '</w:t><w:br/><w:t xml:space="preserve">'
+    + second + '</w:t></w:r></w:p>';
+}
+
+/** A numbered paragraph holding a second, hand-numbered item after a tab. */
+function numberedPair(left, right, numId) {
+  return '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="' + numId + '"/></w:numPr></w:pPr>'
+    + '<w:r><w:t xml:space="preserve">' + left + '</w:t><w:tab/><w:t xml:space="preserve">'
+    + right + '</w:t></w:r></w:p>';
+}
+
 var DOCUMENT = '<?xml version="1.0" encoding="UTF-8"?><w:document ' + W + '><w:body>'
   + plain('S.S. ACADEMY KOIRAUNA BHADOHI')
   + plain('HALF YEARLY EXAMINATION 2026-27')
@@ -120,6 +134,110 @@ var CONTAINERS = '<?xml version="1.0" encoding="UTF-8"?><w:document ' + W + '><w
   + plain('LAST paragraph')
   + '</w:body></w:document>';
 
+/* ----------------------------------------- a real paper, as Word stores it
+ *
+ * Every line of this came back wrong from a class-5 English paper:
+ *
+ *   Q1  a row of options typed with square boxes was read as five separate
+ *       questions, one per option, and the stems lost their numbers;
+ *   Q3  a statement broken with Shift+Enter became an item of its own, and
+ *       everything below it was numbered one too high;
+ *   Q6  the box of phrases above the sentences was numbered as item 1;
+ *   Q8  items typed two to a line came out as "Talk- IV. Face-".
+ */
+
+var PAPER = '<?xml version="1.0" encoding="UTF-8"?><w:document ' + W + '><w:body>'
+  + plain('S.S. ACADEMY KOIRAUNA BHADOHI')
+  + plain('Half Yearly Examination 2026-27')
+  + plain('Sub - English	Class - 5th')
+  + plain('Time - 2:30 hrs	M.M. 50')
+
+  + plain('Que.1- Choose the correct option. (5)')
+  + numbered('Mike lived with his:', '11')
+  + plain('(a) grandpa [ ]	(b) mother [ ]	(c) granny [ ]')
+  + numbered('What did Hector use to tie the princess with?', '11')
+  + plain('(a) a rope [ ]	(b) tree trunk[ ]	(c) vine [ ]')
+  + plain('III. What action does Totto-chan repeatedly do with her desk?')
+  + plain('(a) paint it [ ]	(b) open and shut it [ ]	(c) clean it [ ]')
+
+  + plain("Que.3- Write 'T' for true and 'F' for false statements:(5)")
+  + numbered('Grandma had a lot of interesting stories to share. [ ]', '12')
+  + numberedWithBreak('Totto-chan stood at the window to look at the beautiful view',
+    'outside.[ ]', '12')
+  + numbered('Pods are not entirely controlled by computers. [ ]', '12')
+
+  + plain('Que.6- Complete the sentences with the phrases given in the box. (5)')
+  + plain('(in the sky, over the tree, across the floor, in the pond)')
+  + numbered('The stars are shining ________.', '13')
+  + numbered('The fish are swimming ________.', '13')
+  + numbered('The birds are flying ________.', '13')
+
+  + plain('Que.8- Write the rhyming word. (5)')
+  + numberedPair('Talk-', 'IV. Face-', '14')
+  + numberedPair('Red-', 'V. Fail-', '14')
+  + numbered('See-', '14')
+  + '</w:body></w:document>';
+
+var PAPER_NUMBERING = '<?xml version="1.0" encoding="UTF-8"?><w:numbering ' + W + '>'
+  + abstractNum('9', 'upperRoman')
+  + '<w:num w:numId="11"><w:abstractNumId w:val="9"/></w:num>'
+  + '<w:num w:numId="12"><w:abstractNumId w:val="9"/></w:num>'
+  + '<w:num w:numId="13"><w:abstractNumId w:val="9"/></w:num>'
+  + '<w:num w:numId="14"><w:abstractNumId w:val="9"/></w:num>'
+  + '</w:numbering>';
+
+function labelsOf(question) {
+  return (question.items.length ? question.items : question.subs)
+    .map(function (entry) { return entry.label || '-'; }).join(',');
+}
+
+function readPaper() {
+  var zip = new JSZip();
+  zip.file('word/document.xml', PAPER);
+  zip.file('word/numbering.xml', PAPER_NUMBERING);
+
+  return zip.generateAsync({ type: 'nodebuffer' })
+    .then(function (buffer) { return PF.readDocx.read(buffer); })
+    .then(function (text) {
+      var prepared = PF.normalize.prepare(text);
+      var paper = PF.parser.parse(prepared.lines, { fontSizePt: 12 });
+      var result = PF.layout.fit(paper, {
+        fontSizePt: 12, latinFont: 'Arial', hindiFont: 'Nirmala UI',
+        questionPrefix: 'auto', maxPages: 2, densityId: 'auto'
+      });
+      var output = PF.renderText.render(result);
+      var q1 = paper.questions[0], q3 = paper.questions[1];
+      var q6 = paper.questions[2], q8 = paper.questions[3];
+
+      // Q1: options are options, whichever brackets the boxes are typed with.
+      expect(q1.kind === 'mcq', 'Q1 should be a tick-the-option question, is ' + q1.kind);
+      expect(q1.subs.length === 3, 'Q1 should have 3 sub-questions, has ' + q1.subs.length);
+      expect(labelsOf(q1) === 'I,II,III', 'Q1 stems are numbered ' + labelsOf(q1) + ', expected I,II,III');
+      expect(/\(a\) Grandpa \( \)\t\(b\) Mother \( \)\t\(c\) Granny \( \)/.test(output),
+        'Q1 options should sit on one line as a row of three');
+
+      // Q3: a line broken with Shift+Enter is the rest of the statement above.
+      expect(q3.items.length === 3, 'Q3 should have 3 statements, has ' + q3.items.length);
+      expect(/beautiful view outside\./.test(output), 'Q3 statement was cut in two');
+      expect(labelsOf(q3) === 'I,II,III', 'Q3 is numbered ' + labelsOf(q3) + ', expected I,II,III');
+
+      // Q6: the box of phrases is not one of the sentences.
+      expect(q6.items.length === 4, 'Q6 should have a lead line and 3 sentences, has ' + q6.items.length);
+      expect(q6.items[0].lead === true, 'the box of phrases should not be an item');
+      expect(labelsOf(q6) === '-,I,II,III', 'Q6 is numbered ' + labelsOf(q6) + ', expected -,I,II,III');
+
+      // Q8: two items to a line, read down the columns.
+      expect(q8.items.length === 5, 'Q8 should have 5 words, has ' + q8.items.length);
+      expect(labelsOf(q8) === 'I,II,III,IV,V', 'Q8 is numbered ' + labelsOf(q8) + ', expected I,II,III,IV,V');
+      expect(q8.items.map(function (i) { return i.text; }).join(' ') === 'Talk- Red- See- Face- Fail-',
+        'Q8 words are in the wrong order: ' + q8.items.map(function (i) { return i.text; }).join(' '));
+
+      // An instruction ends with one mark, not two.
+      expect(/Choose the correct option:/.test(output) && !/option\.:/.test(output),
+        'the heading should end "option:", not "option.:"');
+    });
+}
+
 function readContainers() {
   var zip = new JSZip();
   zip.file('word/document.xml', CONTAINERS);
@@ -176,7 +294,7 @@ zip.generateAsync({ type: 'nodebuffer' })
     expect(/^\s*5\. Who chooses salt/m.test(output), 'Q2 item 5 is not numbered in the output');
     expect(/\(a\) Sugar is/.test(output), 'Q6 item a is not lettered in the output');
 
-    return readContainers();
+    return readContainers().then(readPaper);
   })
   .then(function () {
     if (failures.length) {
