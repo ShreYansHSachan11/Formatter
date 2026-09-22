@@ -237,6 +237,18 @@ because the marks were typed at the end of the *third* line of the verse rather
 than the line below the heading, marks are now looked for anywhere in a
 question that has none.
 
+### Lines that belong to the document, not to the paper
+
+A paper written in Google Docs and downloaded as `.docx` brings the titles of
+the document's *tabs* with it — `Tab 2`, `Tab 3` — as ordinary paragraphs. They
+are not visible as text while you write, so nobody puts them there on purpose,
+and once they are in the file they read as a question's heading and its items.
+
+A line that says nothing but `Tab 4` cannot be part of any exam paper, so it is
+dropped — and listed in the fixes, because a line that disappears has to be
+accounted for. The rule is the whole line and nothing else: `Press the Tab key`
+says something, and stays.
+
 ### The sentinels are not whitespace
 
 `prepare()` replaces tabs and runs of spaces with sentinel characters, so the

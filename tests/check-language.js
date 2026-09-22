@@ -35,7 +35,11 @@ function expect(condition, message) {
 
 function suggestionsFor(lines) {
   var prepared = PF.normalize.prepare(lines.join('\n'));
-  return { fixes: prepared.fixes, suggestions: PF.normalize.suggest(prepared.lines) };
+  return {
+    fixes: prepared.fixes,
+    lines: prepared.lines,
+    suggestions: PF.normalize.suggest(prepared.lines)
+  };
 }
 
 function find(suggestions, word) {
@@ -106,6 +110,34 @@ expect(PF.normalize.polishFragment(STATEMENT, { terminalQuestionMark: true }) ==
 expect(PF.normalize.polishFragment(QUESTION, { terminalQuestionMark: true }) === QUESTION + '?',
   'a Hindi question should still be given its question mark');
 console.log('  a question mark only where something is actually asked');
+
+/* --- lines that belong to the document, not to the paper ----------------- */
+
+/*
+ * A paper written in Google Docs and downloaded as .docx brings the titles of
+ * the document's tabs with it - "Tab 2", "Tab 3" - as ordinary paragraphs,
+ * which then read as a question's heading and its items. They go, and they are
+ * listed as having gone. A line that says something about a tab stays.
+ */
+var furniture = suggestionsFor([
+  'Que 1. Answer the following questions:',
+  'Tab 2',
+  'What is the capital of India?',
+  'Tab 3',
+  'Press the Tab key to move to the next cell.',
+  'Untitled document'
+]);
+
+expect(furniture.lines.join('\n').indexOf('Tab 2') < 0
+  && furniture.lines.join('\n').indexOf('Tab 3') < 0,
+  'a document tab title should not reach the paper');
+expect(!furniture.lines.some(function (line) { return /Untitled/.test(line); }),
+  '"Untitled document" is the document\'s name, not a question');
+expect(furniture.lines.some(function (line) { return /Press the Tab key/.test(line); }),
+  'a line that says something about a tab is not furniture and must stay');
+expect(furniture.fixes.some(function (fix) { return fix.rule === 'document furniture'; }),
+  'a line that disappears has to be accounted for in the list of fixes');
+console.log('  a document tab title is furniture, "Press the Tab key" is not');
 
 /* --- the mechanical tier still applies without asking -------------------- */
 
