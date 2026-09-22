@@ -53,6 +53,59 @@
 
   /* ---------------------------------------------------------------- header */
 
+  /*
+   * A header label is typed with whatever punctuation came to hand: "Sub-",
+   * "Class :-", "Time_ 2:30", "Mark__50". So the separator between a label and
+   * its value is any run of spaces, dashes, colons, dots or underscores -
+   * reading only "-:." once lost the time and the marks of a whole paper,
+   * because that teacher had drawn them with underscores.
+   */
+  var SEP = '[\\s\\-:.\\u2013\\u2014_]*';
+
+  /*
+   * And the label itself has as many spellings as there are teachers. The
+   * marks line alone turns up as M.M., MM, Mark, Marks, Max Marks, Total Marks
+   * and पूर्णांक, so each field is recognised by all of its names rather than
+   * by the one this school happened to use last time.
+   */
+  var LABEL = {
+    subject: '(?:sub(?:ject)?|\\u0935\\u093F\\u0937\\u092F)',                                   // विषय
+    className: '(?:class|std|standard|\\u0915\\u0915\\u094D\\u0937\\u093E)',                    // कक्षा
+    time: '(?:time|\\u0938\\u092E\\u092F)',                                                     // समय
+    marks: '(?:m\\.?\\s*m\\.?|max(?:imum)?\\s*marks?|total\\s*marks?|marks?'
+      + '|\\u092A\\u0942\\u0930\\u094D\\u0923\\u093E\\u0902\\u0915|\\u0905\\u0902\\u0915)'      // पूर्णांक / अंक
+  };
+
+  /*
+   * Where one field's value ends: at a bar, at the start of another label, or
+   * at the end. A marks label only counts when a number follows it, so that
+   * "Sub: Marketing" is a subject and not an empty one ending at "Mark".
+   * Devanagari labels take no \b - a Devanagari letter is not a word character
+   * to a JavaScript regular expression, so the boundary would never match.
+   */
+  var NEXT_FIELD = '(?=\\s*(?:\\|'
+    + '|(?:time|class|std|standard|sub(?:ject)?)\\b'
+    + '|(?:\\u0938\\u092E\\u092F|\\u0915\\u0915\\u094D\\u0937\\u093E|\\u0935\\u093F\\u0937\\u092F'
+    + '|\\u092A\\u0942\\u0930\\u094D\\u0923\\u093E\\u0902\\u0915|\\u0905\\u0902\\u0915)'
+    + '|' + LABEL.marks + SEP + '\\d'
+    + '|$))';
+
+  /*
+   * The first thing in the header that reads like this field and holds a
+   * plausible value. Taking the first match outright is not enough: the words
+   * a label is made of turn up in the title lines too, and "Standard
+   * Examination 2026-27" would otherwise be read as class "Examination".
+   */
+  function field(joined, label, value, plausible) {
+    var re = new RegExp(label + SEP + value, 'gi');
+    var match;
+    while ((match = re.exec(joined)) !== null) {
+      var candidate = tidyValue(match[1]);
+      if (candidate && (!plausible || plausible(candidate))) return candidate;
+    }
+    return '';
+  }
+
   function parseHeader(lines) {
     var joined = lines.map(PF.normalize.clean).join(' | ');
     var header = {
@@ -64,31 +117,82 @@
       maxMarks: ''
     };
 
-    var subject = joined.match(/sub(?:ject)?\s*[-:.–]*\s*([^|]+?)(?=\s*(?:\||time|class|m\.?m|$))/i);
-    if (subject) header.subject = tidyValue(subject[1]);
-
-    var cls = joined.match(/class\s*[-:.–]*\s*([^|]*?)(?=\s*(?:\||time|m\.?m|sub|$))/i);
-    if (cls) header.className = tidyValue(cls[1]);
+    header.subject = field(joined, LABEL.subject, '([^|]+?)' + NEXT_FIELD);
+    header.className = field(joined, LABEL.className, '([^|]*?)' + NEXT_FIELD, looksLikeClass);
 
     // The unit after the clock time has to be an actual unit. Matching any
     // letters here once produced "Time: 2:30 Class" from "Time- 2:30 Class:- 1st".
-    var time = joined.match(/time\s*[-:.–]*\s*([0-9]{1,2}[:.][0-9]{2}(?:\s*(?:hrs?|hours?|h|am|pm))?|[0-9]+\s*(?:hrs?|hours?))/i);
-    if (time) header.time = tidyValue(time[1]);
+    header.time = field(joined, LABEL.time,
+      '([0-9]{1,2}[:.][0-9]{2}(?:\\s*(?:hrs?|hours?|h|am|pm))?'
+      + '|[0-9]+\\s*(?:hrs?|hours?|\\u0918\\u0902\\u091F\\u0947|\\u0918\\u0923\\u094D\\u091F\\u0947))');
 
-    var marks = joined.match(/m\.?\s*m\.?\s*[-:.–]*\s*(\d{1,3})/i);
-    if (marks) header.maxMarks = marks[1];
+    header.maxMarks = field(joined, LABEL.marks, '(\\d{1,3})');
 
     lines.forEach(function (line) {
       var text = PF.normalize.clean(line);
       if (!header.exam && /(examination|exam\b|परीक्षा)/i.test(text)) {
-        header.exam = PF.text.collapseSpaces(text);
+        header.exam = examCase(text);
       } else if (!header.school && /(academy|school|vidyalaya|college|विद्यालय)/i.test(text)) {
-        header.school = dotInitials(PF.normalize.clean(text));
+        header.school = schoolName(text);
       }
     });
 
-    if (!header.school && lines.length) header.school = dotInitials(PF.normalize.clean(lines[0]));
+    if (!header.school && lines.length) header.school = schoolName(lines[0]);
     return header;
+  }
+
+  /*
+   * The two title lines are typed a little differently on every paper -
+   * "S.S Academy koirauna Bhadohi", "Half _ yearly Examination" - and those
+   * underscores are a separator someone drew by hand, not part of the name.
+   * Every paper from a school should look like the same paper, so the school
+   * stands in capitals and the examination in title case however it arrived.
+   * Both remain editable in the header boxes above the preview.
+   */
+  function withoutHandDrawnRules(text) {
+    return PF.text.collapseSpaces(String(text || '')
+      .replace(/_+/g, ' ')
+      .replace(/[\s\-–—]+$/, ''));
+  }
+
+  var LOWER_IN_TITLES = ['of', 'the', 'and', 'for', 'in', 'to'];
+
+  function examCase(text) {
+    var line = withoutHandDrawnRules(PF.normalize.clean(text));
+    // A line with no lower case in it anywhere is shouting, not abbreviating:
+    // "ANNUAL EXAMINATION" is a title in capitals, while the CBSE in "Half
+    // Yearly Examination CBSE" is a name that is spelled that way.
+    var shouting = !/[a-z]/.test(line);
+
+    return line.replace(/[A-Za-z][A-Za-z'.]*/g, function (word, offset) {
+      if (/^[A-Z]\.(?:[A-Z]\.?)+$/.test(word)) return word;          // S.A., G.K.
+      if (!shouting && /^[A-Z]{2,}$/.test(word)) return word;        // CBSE
+      var lower = word.toLowerCase();
+      if (offset > 0 && LOWER_IN_TITLES.indexOf(lower) >= 0) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    });
+  }
+
+  /*
+   * A class is a number, a roman numeral or one of the classes below school:
+   * "8th", "2nd (B)", "XII", "Nursery", "5". Asking for that much is what keeps
+   * the wider set of labels safe - "Standard" is a class label in half the
+   * papers in the country and an ordinary word in the other half, and without
+   * this the exam line of a "STANDARD EXAMINATION" would be read as a class.
+   */
+  var INFANT_CLASSES = /^(nursery|prep|play\s*group|[lu]?\.?k\.?g\.?)\b/i;
+
+  function looksLikeClass(value) {
+    if (!value || value.length > 20) return false;
+    // It has to *begin* like a class. "Examination 2026-27" has a number in it
+    // too, and that is exactly the line this guard exists to turn down.
+    if (/^[0-9०-९]/.test(value)) return true;
+    if (INFANT_CLASSES.test(value)) return true;
+    return /^(?:i{1,3}|iv|v|vi{1,3}|ix|x|xi{1,2})(?:th|st|nd|rd)?\b/i.test(value);
+  }
+
+  function schoolName(text) {
+    return dotInitials(withoutHandDrawnRules(PF.normalize.clean(text)).toUpperCase());
   }
 
   /*
@@ -100,10 +204,13 @@
   var NOT_INITIALS = ['ST', 'MT', 'DR', 'MR', 'MS', 'JR', 'SR', 'THE'];
 
   function dotInitials(name) {
-    return String(name || '').replace(/^([A-Z]{2,3})(?=\s+[A-Za-z])/, function (initials) {
-      if (NOT_INITIALS.indexOf(initials) >= 0) return initials;
-      return initials.split('').join('.') + '.';
-    });
+    return String(name || '')
+      .replace(/^([A-Z]{2,3})(?=\s+[A-Za-z])/, function (initials) {
+        if (NOT_INITIALS.indexOf(initials) >= 0) return initials;
+        return initials.split('').join('.') + '.';
+      })
+      // "S.S Academy" - the stops were started and then abandoned.
+      .replace(/^((?:[A-Z]\.){1,2}[A-Z])(?=\s+[A-Za-z])/, '$1.');
   }
 
   /*

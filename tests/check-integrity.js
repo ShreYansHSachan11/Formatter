@@ -251,6 +251,43 @@ console.log('Content integrity');
 CASES.forEach(run);
 
 /*
+ * The header always looks like the same header.
+ *
+ * Time, class and marks share the fourth line and are spread across the width.
+ * A paper that only gives one of them used to put that one field on a row of
+ * its own, which reads as a line hanging off the left margin under three
+ * centred ones.
+ */
+(function checkLonelyHeaderField() {
+  var source = ['S.S Academy koirauna Bhadohi', 'Half _ yearly Examination', 'Sub- Hindi',
+    'Class - 8th', 'Que 1. Tick the correct option (5)', 'a. one ( ) b. two ( )'].join('\n');
+  var prepared = PF.normalize.prepare(source);
+  var paper = PF.parser.parse(prepared.lines, {
+    properNouns: {}, acceptedSuggestions: [], fontSizePt: 12
+  });
+  var blocks = PF.layout.fit(paper, OPTIONS).blocks;
+  var classBlock = blocks.filter(function (block) {
+    return (block.key === 'h.class') || (block.cellKeys || []).indexOf('h.class') >= 0;
+  })[0];
+
+  if (!classBlock) {
+    fail('lonely header field', 'the class went missing from the header');
+  } else if (classBlock.type === 'header-row') {
+    fail('lonely header field', 'the only field on the fourth line was laid out as a row, '
+      + 'so it sits at the left margin under three centred lines');
+  } else if (classBlock.align !== 'center') {
+    fail('lonely header field', 'a header line on its own should be centred with the rest');
+  }
+
+  var header = paper.header;
+  if (header.school !== 'S.S. ACADEMY KOIRAUNA BHADOHI' || header.exam !== 'Half Yearly Examination') {
+    fail('lonely header field', 'the title lines should be tidied to the house style, got "'
+      + header.school + '" / "' + header.exam + '"');
+  }
+  console.log('  header - a single field on the fourth line stays centred, titles tidied');
+})();
+
+/*
  * The two-line spacing, end to end.
  *
  * A gap stated in lines has to survive all the way to the writers, and the

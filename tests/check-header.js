@@ -60,6 +60,47 @@ var CASES = [
     lines: ['ST JOSEPH SCHOOL', 'Half yearly examination 2026-27', 'Sub:- English',
       'Time- 2:30 Class:- 3rd M.M. 50'],
     expect: { school: 'ST JOSEPH SCHOOL', subject: 'English', className: '3rd', time: '2:30', maxMarks: '50' }
+  },
+  {
+    // The class-8 Hindi paper, typed exactly as it arrived. The underscores
+    // are separators drawn by hand, and "Mark" is the label this teacher uses
+    // for the maximum marks. Reading neither of them lost the whole last line.
+    name: 'underscores for separators, and "Mark" for M.M.',
+    lines: ['S.S Academy koirauna Bhadohi', 'Half _ yearly Examination', 'Class - 8th',
+      'Sub- Hindi', 'Time_ 2:30\t\t\tMark__50'],
+    expect: {
+      school: 'S.S. ACADEMY KOIRAUNA BHADOHI',
+      exam: 'Half Yearly Examination',
+      subject: 'Hindi', className: '8th', time: '2:30', maxMarks: '50'
+    }
+  },
+  {
+    name: 'marks spelled out in full',
+    lines: ['S.S. ACADEMY KOIRAUNA BHADOHI', 'ANNUAL EXAMINATION 2026-27', 'Subject: Maths',
+      'Class: 12th', 'Time: 3 hours', 'Maximum Marks - 100'],
+    expect: { exam: 'Annual Examination 2026-27', subject: 'Maths', className: '12th',
+      time: '3 hours', maxMarks: '100' }
+  },
+  {
+    // "Marketing" begins with the word "Mark". A subject must not end there.
+    name: 'a subject that begins like a label',
+    lines: ['S.S. ACADEMY KOIRAUNA BHADOHI', 'Half yearly examination 2026-27',
+      'Sub: Marketing   Class: 11th   Total Marks: 70'],
+    expect: { subject: 'Marketing', className: '11th', maxMarks: '70' }
+  },
+  {
+    // "Standard" is a class label in half the papers in the country and an
+    // ordinary word in the other half. A class has to look like a class.
+    name: 'a word that only looks like a class label',
+    lines: ['S.S. ACADEMY KOIRAUNA BHADOHI', 'Standard Examination 2026-27', 'Sub: English',
+      'Std. 6   Time: 2:30   M.M. 50'],
+    expect: { exam: 'Standard Examination 2026-27', className: '6', time: '2:30', maxMarks: '50' }
+  },
+  {
+    name: 'labels in Hindi',
+    lines: ['एस.एस. एकेडमी कोइरौना भदोही', 'अर्धवार्षिक परीक्षा 2026-27',
+      'विषय- हिंदी', 'समय_ 2:30    कक्षा- 5    पूर्णांक__50'],
+    expect: { subject: 'हिंदी', className: '5', time: '2:30', maxMarks: '50' }
   }
 ];
 

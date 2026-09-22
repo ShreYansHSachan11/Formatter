@@ -265,7 +265,12 @@
     if (header.className) addField('h.class', labelFor('class', header) + header.className);
     if (header.maxMarks) addField('h.marks', labelFor('marks', header) + header.maxMarks);
 
-    if (line4.length) {
+    // A row spreads its fields across the width, which reads as a line hanging
+    // off the left margin when a paper only gives one of them. On its own it
+    // belongs under the subject, centred with the rest of the header.
+    if (line4.length === 1) {
+      push(line4Keys[0], line4[0]);
+    } else if (line4.length) {
       blocks.push({
         type: 'header-row',
         key: 'h.row',

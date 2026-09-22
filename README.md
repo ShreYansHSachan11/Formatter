@@ -86,12 +86,54 @@ one of those cases; take the guards out and it fails.
 | One font size | 12 pt everywhere, including the header (changeable in *Layout*). |
 | Consistent header | Four centred lines: school, examination, subject, then Time / Class / M.M. spread across the width, with a rule underneath. Only subject and class change between papers. |
 | Bold questions | The question line is bold; everything inside it is normal weight. |
-| No blank lines | Questions are separated by a small typographic gap (2–7 pt) instead of empty lines. Tick **No gap between questions** for none at all. |
+| No blank lines | Questions are separated by a small typographic gap (2–7 pt) instead of empty lines. Tick **No gap between questions** for none at all, or choose **Spacious (2-line gap)** for two blank lines to write between. |
 | Two pages | The paper is measured and the spacing is tightened automatically until it fits. If even the tightest setting needs three pages, you are told rather than silently given a third page. |
 | Options in a row | Tick-box options are laid out horizontally on one line, whether they were typed side by side or one below the other. Each column is measured separately, so one long choice no longer pushes the rest onto their own lines. If they genuinely will not fit, they wrap to evenly filled rows. |
 | Short answers in a row | One-word items (word meanings, opposites, plurals, spellings, word pairs) are packed several per line instead of one line each. How many fit is measured from the widest item, so bare words sit five across and items with a blank to fill sit two or three across. |
 | Match the following | Two columns at a fixed tab stop, at least a third of the page wide, so they never look cramped. A question only becomes a match when it really is one — see below. |
 | Language fixes | Mechanical fixes are applied automatically; anything that could change meaning is offered as a tick-box suggestion. |
+
+### Reading the header however it was typed
+
+The four header lines are the one part of a paper that is the same every time,
+and the one part typed differently every time. A class-8 Hindi paper arrived
+like this:
+
+    S.S Academy koirauna Bhadohi
+    Half _ yearly Examination
+    Class - 8th
+    Sub- Hindi
+    Time_ 2:30                    Mark__50
+
+and came back without its time and without its marks, because the separator
+between a label and its value was read as `-`, `:` or `.` and this teacher had
+drawn it with underscores — and because the maximum marks were only ever
+looked for under the name `M.M.`
+
+So a separator is now any run of spaces, dashes, colons, dots or underscores,
+and every field is recognised by all of its names: `M.M.`, `MM`, `Mark`,
+`Marks`, `Max Marks`, `Total Marks`, `पूर्णांक`; `Class`, `Std`, `Standard`,
+`कक्षा`; `Sub`, `Subject`, `विषय`; `Time`, `समय`.
+
+Widening the labels needs two guards, and both earn their place:
+
+- a field ends at the *next* label, so `Class: 11th Total Marks: 70` is a class
+  of 11th — but `Sub: Marketing` is Marketing, not an empty subject ending at
+  "Mark", because a marks label only counts when a number follows it;
+- a class has to look like a class (a number, a roman numeral, or Nursery/KG),
+  and the header is searched for the first field that does. Otherwise the
+  `Standard` in `Standard Examination 2026-27` reads as a class of
+  "Examination".
+
+The two title lines are then put into the house style — the school in capitals,
+the examination in title case, the hand-drawn underscores dropped, and initials
+that were started and abandoned finished off, so `S.S Academy koirauna Bhadohi`
+becomes `S.S. ACADEMY KOIRAUNA BHADOHI`. A line in capitals is shouting and is
+title-cased; an abbreviation inside a mixed-case line (`CBSE`, `G.K.`) is left
+alone. Both lines stay editable in the boxes above the preview.
+
+`tests/check-header.js` holds eleven header styles, including that paper
+exactly as it was typed.
 
 ## Item numbering
 
