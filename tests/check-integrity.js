@@ -106,6 +106,38 @@ var CASES = [
     ]
   },
   {
+    name: 'hindi-wrapped fixture (a paper whose lines were broken by hand)',
+    text: fs.readFileSync(path.join(__dirname, 'fixtures', 'hindi-wrapped.txt'), 'utf8'),
+    kinds: ['list', 'mcq', 'list', 'list', 'list', 'plain', 'list', 'plain', 'list', 'inline', 'list'],
+    marks: ['', '1x5', '1x5', '1x5', '2x5', '1x2', '1x5', '', '1x3', '1x5', '1x2'],
+    maxPages: 3,
+    // Every line here that was broken in the middle is put back together: the
+    // rest of a statement, the rest of a word list, the rest of an option and
+    // the rest of a heading. A label typed with a danda or a comma inside its
+    // brackets is still that label, and a Hindi instruction keeps its own
+    // punctuation instead of being given a colon.
+    lines: [
+      /^\s*\(ख\) सिरभाव किसी भी _+ के बिना पानी की ठीक जगह बताते थे।$/m,
+      /^\s*खिदमत, ज्ञात, सूम, प्रलय, संयोग, प्रचुर, शुक्राचार्य, लवण शाश्वत, तूलिका$/m,
+      /^\s*\(ग\) चित्रकार की खबर लेने के लिए राजा ने कितने समय पश्चात अहलकार को भेजा\?$/m,
+      /^\s*प्रश्न 6\. अपनी पाठ्य पुस्तक से आठ लाइन की कविता लिखिए जो इस प्रश्न पत्र में ना आया हो।\t\(1x2\)$/m,
+      /^\s*प्रश्न 7\. निम्नलिखित शब्दों के संधि विच्छेद कीजिए तथा संधि का नाम लिखिए।\t\(1x5\)$/m,
+      /^\s*\(ग\) लेखक दुर्घटना के बाद जाना चाह रहा था-$/m,
+      /^\s*\(क\) आकाश_ पाताल का अंतर होना _$/m,
+      /\(द\) एक सौ तीस बच्चे \( \)$/m,
+      /^\s*प्रश्न 9\. मुहावरा लिखिए\t\(1x3\)$/m,
+      /^\s*\(क\) दूरदर्शन।\t+\(ख\) जनसंख्या की समस्या\t+\(ग\) दीपावली$/m,
+      // Two sentences to fill in, neither of them labelled, the first of them
+      // ending in the middle of a sentence. A line with a blank in it is an
+      // item however it is punctuated, so these two must stay two.
+      /^\s*1\. मोहन प्रतिदिन विद्यालय जाता है और वहाँ _+ पढ़ता$/m,
+      /^\s*2\. सीता अपनी माता के साथ बाज़ार _+ जाती है।$/m
+    ],
+    // Nothing in a Hindi paper is given a colon it was not typed with, and no
+    // question mark is invented for a sentence that is not asking anything.
+    absent: [/।:/, /:$/m, /बताते\?/, /पश्चात\?/]
+  },
+  {
     name: 'letter-spaced fixture (words written out letter by letter)',
     text: fs.readFileSync(path.join(__dirname, 'fixtures', 'letter-spaced.txt'), 'utf8'),
     kinds: ['inline'],
@@ -134,9 +166,21 @@ function fail(caseName, message) {
   failures.push(caseName + ': ' + message);
 }
 
-/** Words only - labels, punctuation and spacing are the formatter's business. */
+/**
+ * Words only - labels, punctuation and spacing are the formatter's business.
+ *
+ * The danda is punctuation, however it is typed: "कीजिए ।" and "कीजिए।" are
+ * the same word followed by the same full stop, and counting the danda as a
+ * letter made every sentence the formatter tidied look like a lost word. The
+ * marks are counted the same way whether they were typed "(1x 5)" or "(1x5)".
+ */
 function tokens(text) {
-  return (text.toLowerCase().match(/[a-z0-9ऀ-ॿ]+/g) || []);
+  return (text.toLowerCase()
+    .replace(/[।॥]/g, ' ')
+    .replace(/(\d)\s*[x×]\s*(\d)/g, function (all, before, after) {
+      return before + ' x ' + after;
+    })
+    .match(/[a-z0-9ऀ-ॣ०-ॿ]+/g) || []);
 }
 
 /*
@@ -148,7 +192,10 @@ function tokens(text) {
  */
 var RESTYLED = ('question questions que ques q प्रश्न').split(' ');
 
-var QUESTION_START_RE = /^\s*(que|ques|question|q|प्रश्न)\b/i;
+// No \b after the Devanagari: a Devanagari letter is not a word character to a
+// JavaScript regular expression, so "प्रश्न 1." never matched and a Hindi
+// paper's header was compared as though it were part of the questions.
+var QUESTION_START_RE = /^\s*(que|ques|question|q|प्रश्न)(?![a-z])/i;
 
 /** Everything from the first question onwards. */
 function questionBody(text) {
@@ -175,7 +222,9 @@ function run(testCase) {
     acceptedSuggestions: [],
     fontSizePt: 12
   });
-  var result = PF.layout.fit(paper, OPTIONS);
+  var result = PF.layout.fit(paper, testCase.maxPages
+    ? Object.assign({}, OPTIONS, { maxPages: testCase.maxPages })
+    : OPTIONS);
   var output = PF.renderText.render(result);
 
   /* 1. nothing lost ------------------------------------------------------ */
@@ -216,6 +265,13 @@ function run(testCase) {
   if (testCase.lines) {
     testCase.lines.forEach(function (pattern) {
       if (!pattern.test(output)) fail(testCase.name, 'expected a line matching ' + pattern);
+    });
+  }
+
+  /* punctuation the formatter must not invent ---------------------------- */
+  if (testCase.absent) {
+    testCase.absent.forEach(function (pattern) {
+      if (pattern.test(output)) fail(testCase.name, 'the output should hold nothing matching ' + pattern);
     });
   }
 

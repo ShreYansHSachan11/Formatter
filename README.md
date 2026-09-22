@@ -135,6 +135,73 @@ alone. Both lines stay editable in the boxes above the preview.
 `tests/check-header.js` holds eleven header styles, including that paper
 exactly as it was typed.
 
+Time, class and marks share the fourth line, and a person correcting it in the
+preview types the *line*, not the cell — which used to leave one field holding
+all three and the other two empty, so the line collapsed against the left
+margin. Whatever is typed, the labels in it decide which field is which.
+
+### Lines that ran out of room
+
+A paper typed by hand is full of lines that are one line of text and two lines
+in the file: the teacher pressed Enter where the page ran out. Read literally,
+the second half becomes an item of its own — which is how
+
+    (ख) सिरभाव किसी भी _____ के बिना पानी की ठीक जगह बताते
+    थे ।
+
+became two questions, how eleven comma-separated words became a numbered list
+of two, how half of the last option of a question turned into a sub-question
+that never existed, and how the second half of a heading was read as the body
+of its own question — in one case as two columns to match.
+
+Three things must be true before a line is read as the rest of the line above
+it, and every one of them on its own is far too weak:
+
+1. it carries no label and no number of Word's own — anything labelled is an
+   item by its own declaration;
+2. it holds no blank to fill in — a line with a blank is an item however it is
+   punctuated;
+3. the line above it is unfinished (no stop, danda, question mark, tick box or
+   blank) **and** long enough to have reached the edge of the page.
+
+Together they separate a wrap from a list: `The fox ____ the wolf to an old
+house` is followed by another line with a blank in it, so neither is folded,
+and `Hot` followed by `Cold` is far too short to have run out of room. A
+heading has one further piece of evidence — the marks. A heading whose marks
+are sitting at the end of the line below it was broken in two, however far
+across the page it happened to reach.
+
+### The sentinels are not whitespace
+
+`prepare()` replaces tabs and runs of spaces with sentinel characters, so the
+layout can tell a column break from ordinary typing. Everything downstream then
+has to be told, because a sentinel is not `\s`. A label typed `(ग।  )` with two
+spaces inside the bracket stopped being a label, and the item was given a
+second one; marks typed `(1x  5)` were recognised, lifted onto the question and
+then left behind in the text as well. Every structural pattern in the parser is
+now built through one `ws()` helper that widens `\s` to include them.
+
+### Measuring Devanagari
+
+Two marks that look alike behave quite differently: one sits above or below its
+consonant and adds no width at all, the other sits beside it and is as wide as
+a letter. Treating them alike measured a Hindi paper about a third narrower
+than it prints, which crammed four options onto a line that could not hold
+them and made every Hindi item look twice as long as it is. `text-utils.js` now
+separates the two, and `letterCount()` counts letters the way a reader does.
+
+### Punctuation the formatter does not invent
+
+- A Devanagari heading keeps the stop it was typed with and is given none it
+  was not: `व्याख्या कीजिए ।:` was a colon added to a sentence that had already
+  ended. The colon is an English convention; Hindi has the danda.
+- A question mark needs an actual question. `किस` lives inside `किसी`, which
+  asks nothing, and a statement about where water belongs came back with a
+  question mark on it. The question word has to be the whole word.
+- A run of underscores in an instruction is a line someone drew, not a blank to
+  fill in, so it is dropped: `मुहावरा लिखिए,,___(1x3)` is an instruction, a
+  rule, and the marks.
+
 ## Item numbering
 
 Word can number a list in two ways, and only one of them is visible in the text:
@@ -358,6 +425,13 @@ separate faults came from at once.
 
 `tests/fixtures/loose-spacing.txt` is a paper typed with double spaces
 everywhere — the case that used to break the parser. Keep it in the suite.
+
+`tests/fixtures/hindi-wrapped.txt` is a class-8 Hindi paper as it was typed,
+broken lines and all: a statement split across two lines, a word list split
+across two lines, an option split across two lines, two headings split across
+two lines, labels with a danda or a comma inside their brackets, marks written
+as `(1x 5)`, and a question whose unlabelled items each hold a blank. Every
+line of it is asserted, so the folding rule cannot quietly grow or shrink.
 
 `tests/check-app.js` also drives the editing: it retypes a question in the
 preview, moves a header line into its box, deletes a line by emptying it, and

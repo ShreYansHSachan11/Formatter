@@ -19,26 +19,59 @@
   'use strict';
 
 
+  /*
+   * Whitespace, as this file has to see it.
+   *
+   * By the time a line reaches the parser, prepare() has replaced its tabs and
+   * its runs of two or more spaces with sentinels, so that the layout can tell
+   * a column break from ordinary typing. A sentinel is not \s - so every
+   * pattern here that expects a space has to be told about them, or a label
+   * typed "(ग।  )" with two spaces inside the bracket stops being a label, a
+   * tick box typed "(  )" stops being a tick box, and marks typed "(1x  5)"
+   * are recognised and then left behind in the text they were lifted out of.
+   */
+  var WS = '[\\s' + PF.normalize.TAB_SEP + PF.normalize.SPACE_SEP + ']';
+
+  /** The same pattern, with every \s widened to include the sentinels. */
+  function ws(pattern, flags) {
+    return new RegExp(pattern.split('\\s').join(WS), flags);
+  }
+
   var QUESTION_RE = new RegExp(
     '^\\s*(?:' +
     '(?:Q|Que|Ques|Quest|Question|QUE)\\s*[-\\u2013\\u2014._:]*\\s*(\\d{1,2})' +
     '|(?:\\u092A\\u094D\\u0930\\u0936\\u094D\\u0928)\\s*[-\\u2013\\u2014._:]*\\s*(\\d{1,2})' +
     ')\\s*[-\\u2013\\u2014.:\\)]*\\s*(.*)$', 'i');
 
-  // Up to three digits: a section can be worth 100. Four would start matching
-  // years, which belong to the paper's title rather than to its marks.
-  var MARKS_RE = /[\(\[]\s*(\d{1,3})\s*[\)\]]\s*[\.\?:]*\s*$/;
+  /*
+   * Up to three digits: a section can be worth 100. Four would start matching
+   * years, which belong to the paper's title rather than to its marks.
+   *
+   * Marks are as often written as a sum as a total - "(1x 5)", "( 2x5 )" - and
+   * reading only a bare number left that sum sitting in the middle of the
+   * heading with no marks at all against the question.
+   */
+  var MARKS_RE = ws('[\\(\\[]\\s*(\\d{1,3}(?:\\s*[x×X]\\s*\\d{1,3})?)\\s*[\\)\\]]\\s*[\\.\\?:।]*\\s*$');
   // A tick box is a tick box whichever brackets it is typed with. Papers use
   // "( )" and "[ ]" interchangeably, and reading only one of them turned a row
   // of options into five separate questions.
-  var EMPTY_BOX_RE = /(?:\(\s*\)|\[\s*\])/g;
-  var TF_BOX_RE = /\[\s*\]\s*$/;
+  var EMPTY_BOX_RE = ws('(?:\\(\\s*\\)|\\[\\s*\\])', 'g');
+  var TF_BOX_RE = ws('\\[\\s*\\]\\s*$');
   // Items typed two to a line are short by nature ("I. Talk-"); a long half is
   // prose that merely has a tab in it.
   var MAX_TABBED_ITEM_CHARS = 45;
   // Roman numerals come first so "(iii)" is read whole instead of as "i".
   var ROMAN = 'ii|iii|iv|vi|vii|viii|ix|xi|xii|II|III|IV|VI|VII|VIII|IX|XI|XII';
-  var LABEL_RE = new RegExp('^\\(?\\s*(' + ROMAN + '|[0-9]{1,2}|[A-Za-z]|[\\u0905-\\u0939])\\s*[\\)\\.\\u2013\\u2014-]+\\s*');
+  /*
+   * A label may carry a stray mark of its own inside the brackets - "(ग।  )",
+   * "( क,)" - where a danda or a comma was typed before the bracket was
+   * closed. It is still the label ग, and reading it as prose gave the item two
+   * labels: the one it was typed with and the one the formatter then invented.
+   * The closing bracket or stop is still required, so a sentence opening
+   * "A, B and C" is not read as a label.
+   */
+  var LABEL_RE = ws('^\\(?\\s*(' + ROMAN + '|[0-9]{1,2}|[A-Za-z]|[\\u0905-\\u0939])'
+    + '\\s*[\\u0964,]?\\s*[\\)\\.\\u2013\\u2014-]+\\s*');
   var MATCH_KEYWORDS = /(match the following|match the|मिलान)/i;
 
   // A heading that says the answers are to be ticked. Used as the licence to
@@ -106,6 +139,31 @@
     return '';
   }
 
+  // The unit after the clock time has to be an actual unit. Matching any
+  // letters here once produced "Time: 2:30 Class" from "Time- 2:30 Class:- 1st".
+  var TIME_VALUE = '([0-9]{1,2}[:.][0-9]{2}(?:\\s*(?:hrs?|hours?|h|am|pm))?'
+    + '|[0-9]+\\s*(?:hrs?|hours?|\\u0918\\u0902\\u091F\\u0947|\\u0918\\u0923\\u094D\\u091F\\u0947))';
+
+  /**
+   * The labelled fields in a single line, and nothing else - no school, no
+   * examination, no falling back to the first line.
+   *
+   * This is what a person gets when they retype the header line in the
+   * preview. Time, class and marks share that line, and typing over the whole
+   * of it used to leave one field holding the lot and the other two empty, so
+   * the line collapsed to a single field against the left margin. Whatever is
+   * typed, the labels in it decide which field is which.
+   */
+  function parseHeaderLine(text) {
+    var joined = PF.normalize.clean(text);
+    return {
+      subject: field(joined, LABEL.subject, '([^|]+?)' + NEXT_FIELD),
+      className: field(joined, LABEL.className, '([^|]*?)' + NEXT_FIELD, looksLikeClass),
+      time: field(joined, LABEL.time, TIME_VALUE),
+      maxMarks: field(joined, LABEL.marks, '(\\d{1,3})')
+    };
+  }
+
   function parseHeader(lines) {
     var joined = lines.map(PF.normalize.clean).join(' | ');
     var header = {
@@ -120,12 +178,7 @@
     header.subject = field(joined, LABEL.subject, '([^|]+?)' + NEXT_FIELD);
     header.className = field(joined, LABEL.className, '([^|]*?)' + NEXT_FIELD, looksLikeClass);
 
-    // The unit after the clock time has to be an actual unit. Matching any
-    // letters here once produced "Time: 2:30 Class" from "Time- 2:30 Class:- 1st".
-    header.time = field(joined, LABEL.time,
-      '([0-9]{1,2}[:.][0-9]{2}(?:\\s*(?:hrs?|hours?|h|am|pm))?'
-      + '|[0-9]+\\s*(?:hrs?|hours?|\\u0918\\u0902\\u091F\\u0947|\\u0918\\u0923\\u094D\\u091F\\u0947))');
-
+    header.time = field(joined, LABEL.time, TIME_VALUE);
     header.maxMarks = field(joined, LABEL.marks, '(\\d{1,3})');
 
     lines.forEach(function (line) {
@@ -219,6 +272,11 @@
    * subject's name: "G.K." must not come back as "G.K". An inner dot between
    * two letters is what tells the two apart.
    */
+  /** "(1x 5)" and "( 2 X 5 )" are the same marks, written differently. */
+  function tidyMarks(marks) {
+    return String(marks || '').replace(/\s+/g, '').replace(/[X×]/g, 'x');
+  }
+
   function tidyValue(value) {
     var text = PF.normalize.clean(value).replace(/^[-:.–\s]+/, '');
     var trimmed = text.replace(/[-:.–\s]+$/, '');
@@ -359,7 +417,112 @@
   }
 
   /** First pass: each body line becomes a raw node. */
-  function toRawNodes(bodyLines, heading) {
+  /* ----------------------------------------------- lines that ran out of room
+   *
+   * A paper typed by hand is full of lines that are one line of text and two
+   * lines in the file: the teacher pressed Enter where the page ran out, or a
+   * break was left behind by whoever typed it. Read literally, the second half
+   * becomes an item of its own - which is how "...ठीक जगह बताते" and "थे ।"
+   * became two questions, how eleven comma-separated words became a numbered
+   * list of two, how half of the last option of a question turned into a
+   * sub-question that never existed, and how the second half of a heading was
+   * read as the body of its own question - in one case as two columns to match.
+   *
+   * Three things must be true before a line is read as the rest of the line
+   * above it, and every one of them on its own is far too weak:
+   *
+   *   1. it carries no label and no number of Word's own - anything labelled
+   *      is an item by its own declaration;
+   *   2. it holds no blank to fill in - a line with a blank is an item of its
+   *      own however it is punctuated;
+   *   3. the line above it is unfinished - it ends in the middle of a
+   *      sentence, with no stop, danda, question mark, tick box or blank - and
+   *      it is long enough to have reached the edge of the page.
+   *
+   * Together they separate a wrap from a list. "The fox ____ the wolf to an
+   * old house" is followed by another line with a blank in it, so neither is
+   * folded; "Hot" followed by "Cold" is far too short to have run out of room.
+   */
+
+  // A line ends here, and whatever follows it is something new.
+  var FINISHED_RE = ws('(?:[.?!:।]|\\(\\s*\\)|\\[\\s*\\]|_{2,}|\\)|\\])\\s*$');
+  var BLANK_RE = /_{2,}/;
+  // The text column of an A4 page, near enough: a line has to have reached a
+  // good way across it to have been broken by it.
+  var COLUMN_IN = 6.8;
+  var WRAPPED_AT = 0.5;
+
+  function ranToTheEdge(text, ctx) {
+    return PF.text.widthIn(text, (ctx && ctx.fontSizePt) || 12) >= COLUMN_IN * WRAPPED_AT;
+  }
+
+  /** Conditions 1 and 2: could this line be the rest of the one above it? */
+  function couldContinue(previousText, currentRaw) {
+    if (!previousText || currentRaw === undefined || currentRaw === null) return false;
+    if (FINISHED_RE.test(previousText)) return false;
+
+    if (PF.normalize.AUTO_LABEL_RE.test(currentRaw)) return false;
+    var current = PF.normalize.clean(currentRaw);
+    if (!current || BLANK_RE.test(current)) return false;
+    return !stripLabel(current);
+  }
+
+  /** Condition 3 as well: the line above ran to the edge of the page. */
+  function continuesLine(previousText, currentRaw, ctx) {
+    return couldContinue(previousText, currentRaw) && ranToTheEdge(previousText, ctx);
+  }
+
+  function joinWrappedLines(bodyLines, ctx) {
+    var joined = [];
+
+    bodyLines.forEach(function (line) {
+      var previous = joined.length ? joined[joined.length - 1] : null;
+      if (previous !== null && continuesLine(PF.normalize.clean(previous), line, ctx)) {
+        joined[joined.length - 1] = previous.replace(/\s+$/, '') + ' '
+          + String(line).replace(/^\s+/, '');
+        return;
+      }
+      joined.push(line);
+    });
+
+    return joined;
+  }
+
+  /*
+   * A heading has a second kind of evidence available to it: the marks. A
+   * question whose marks are sitting at the end of the line below it, on a
+   * line that carries no label of its own, is a heading that was broken in
+   * two - however far across the page it happens to have reached.
+   */
+  function continuesHeading(heading, raw, ctx) {
+    if (!couldContinue(heading, raw.bodyLines[0])) return false;
+    if (ranToTheEdge(heading, ctx)) return true;
+    return !raw.marks && MARKS_RE.test(PF.normalize.clean(raw.bodyLines[0]));
+  }
+
+  /**
+   * The same rule for a question's heading: "...संधि विच्छेद कीजिए तथा संधि का"
+   * is half a sentence, and the half below it is the rest of the heading - not
+   * the first item of the question, and certainly not a column to match.
+   */
+  function foldHeadingContinuation(raw, ctx) {
+    while (raw.bodyLines.length) {
+      var heading = PF.normalize.clean(raw.heading);
+      if (!continuesHeading(heading, raw, ctx)) return;
+
+      raw.heading = PF.text.collapseSpaces(heading + ' '
+        + PF.normalize.clean(raw.bodyLines.shift()));
+
+      // The marks were on the half that had been left behind.
+      var marks = raw.heading.match(MARKS_RE);
+      if (marks) {
+        if (!raw.marks) raw.marks = tidyMarks(marks[1]);
+        raw.heading = raw.heading.slice(0, marks.index);
+      }
+    }
+  }
+
+  function toRawNodes(bodyLines, heading, ctx) {
     var nodes = [];
     var matching = MATCH_KEYWORDS.test(heading || '');
     // Whether Word is doing the numbering for this question. If it is, every
@@ -369,7 +532,7 @@
       return PF.normalize.AUTO_LABEL_RE.test(line);
     });
 
-    bodyLines.forEach(function (rawLine) {
+    joinWrappedLines(bodyLines, ctx).forEach(function (rawLine) {
       // A line Word numbered automatically carries a marker instead of a
       // visible number; the number itself is assigned later, per question.
       var line = rawLine;
@@ -483,7 +646,7 @@
    * a tick-the-option heading are the questions, not the choices.
    */
 
-  var TRAILING_BOX_RE = /\s*\(\s*\)\s*$/;
+  var TRAILING_BOX_RE = ws('\\s*\\(\\s*\\)\\s*$');
   var MAX_OPTION_CHARS = 45;
   var MAX_OPTION_RUN = 8;
   // Without a label to go on, a tick box is the only evidence there is, and a
@@ -507,8 +670,8 @@
 
   // A choice is a few words, not a sentence, and never has a blank in it: a
   // line with a blank is a line to be written on.
-  var BLANK_IN_LINE_RE = /(_{3,}|\[\s*\])/;
-  var SENTENCE_TAIL_RE = /[?।]\s*$/;
+  var BLANK_IN_LINE_RE = ws('(_{3,}|\\[\\s*\\])');
+  var SENTENCE_TAIL_RE = ws('[?।]\\s*$');
 
   function looksLikeOption(node, bare) {
     if (!node || node.kind !== 'item' || node.box) return false;
@@ -641,8 +804,8 @@
    * splits into two halves that genuinely read like a matching pair.
    */
 
-  var BLANK_OR_BOX_RE = /(_{3,}|\(\s*\)|\[\s*\])/;
-  var SENTENCE_END_RE = /[?.!।]\s*$/;
+  var BLANK_OR_BOX_RE = ws('(_{3,}|\\(\\s*\\)|\\[\\s*\\])');
+  var SENTENCE_END_RE = ws('[?.!।]\\s*$');
   var MAX_PAIR_CHARS = 40;
   var MAX_PAIR_WORDS = 5;
 
@@ -952,7 +1115,10 @@
    */
   function isShortItem(text, fontPt) {
     var bare = String(text || '').replace(/_{2,}/g, ' ').replace(/[\.\?।]+$/, '').trim();
-    var letters = bare.replace(/[^A-Za-zऀ-ॿ]/g, '').length;
+    // Counted as a reader counts them: the marks stacked on a Devanagari
+    // letter are part of it, and counting them separately made every Hindi
+    // item look twice as long as it is.
+    var letters = PF.text.letterCount(bare);
     return letters <= 14
       && bare.length <= 30
       && PF.text.widthIn(bare, fontPt || 12) <= 2.4;
@@ -963,8 +1129,9 @@
   }
 
   function buildQuestion(raw, ctx) {
+    foldHeadingContinuation(raw, ctx);
     var heading = polishHeading(raw.heading, ctx);
-    var nodes = groupStackedOptions(toRawNodes(raw.bodyLines, raw.heading), raw.heading);
+    var nodes = groupStackedOptions(toRawNodes(raw.bodyLines, raw.heading, ctx), raw.heading);
     var kind = classify(raw.heading, nodes);
 
     var question = {
@@ -1109,6 +1276,10 @@
   function polishHeading(text, ctx) {
     var out = PF.normalize.applySuggestions(text, ctx.acceptedSuggestions);
     out = PF.normalize.polishFragment(out, { properNouns: ctx.properNouns, fixes: ctx.fixes });
+    // An instruction has nothing to fill in, so a run of underscores in it is a
+    // line someone drew rather than a blank: "मुहावरा लिखिए,,___(1x3)" is an
+    // instruction with a rule after it and the marks at the end.
+    out = PF.text.collapseSpaces(out.replace(/_{2,}/g, ' ').replace(/\s*,(\s*,)+/g, ','));
     out = out.replace(/\s*[-–—_:;,]+\s*$/, '');
 
     // "Write 8 line poems ?" is an instruction, not a question - drop the "?".
@@ -1122,6 +1293,13 @@
     // dot - the inner dot between two letters is what tells the two apart.
     if (/\.\s*$/.test(out) && !/[A-Za-z]\.[A-Za-z]/.test(out)) out = out.replace(/\s*\.\s*$/, '');
 
+    /*
+     * A colon is the English convention for an instruction followed by the
+     * thing it instructs. Hindi has its own - the danda - so a Devanagari
+     * heading keeps the stop it was typed with and is given none it was not.
+     * "व्याख्या कीजिए ।:" is a colon added to a sentence that had already ended.
+     */
+    if (PF.text.hasDevanagari(out)) return out;
     if (!/[?:।]$/.test(out)) out += ':';
     return out;
   }
@@ -1152,7 +1330,7 @@
         var marks = '';
         var marksMatch = rest.match(MARKS_RE);
         if (marksMatch) {
-          marks = marksMatch[1];
+          marks = tidyMarks(marksMatch[1]);
           rest = rest.slice(0, marksMatch.index);
         }
         current = { number: match[1] || match[2], heading: rest, marks: marks, bodyLines: [] };
@@ -1183,13 +1361,14 @@
     var first = raw.bodyLines[0];
     var match = PF.normalize.clean(first).match(MARKS_RE);
     if (!match) return;
-    raw.marks = match[1];
+    raw.marks = tidyMarks(match[1]);
     raw.bodyLines[0] = first.replace(MARKS_RE, '').trim(); // the same pattern, not a copy of it
     if (!raw.bodyLines[0]) raw.bodyLines.shift();
   }
 
   PF.parser = {
     parse: parse,
+    parseHeaderLine: parseHeaderLine,
     parseOptions: parseOptions,
     splitInlineItems: splitInlineItems,
     stripLabel: stripLabel

@@ -33,6 +33,9 @@
     time: 'hdrTime', className: 'hdrClass', maxMarks: 'hdrMarks'
   };
   var HEADER_LABELS = { subject: 'subject', time: 'time', className: 'class', maxMarks: 'marks' };
+  // The fields that are written with a label in front of them, and so can be
+  // told apart by it. The school and the examination are lines, not fields.
+  var LABELLED_FIELDS = ['subject', 'time', 'className', 'maxMarks'];
 
   var el = {};
 
@@ -715,6 +718,23 @@
 
   /** A header line edited in the preview goes back into its box on the left. */
   function applyHeaderLineEdit(field, text) {
+    /*
+     * Time, class and marks share the fourth line, and a person correcting it
+     * types the line, not the cell: they select it and write "Time: 2 hrs
+     * Class: 8th M.M. 50". That used to leave whichever cell they typed into
+     * holding all three and the other two empty, so the line collapsed into a
+     * single field. The labels in what was typed decide which field is which -
+     * and a field whose label was typed away is a field that was removed.
+     */
+    var parsed = LABELLED_FIELDS.indexOf(field) >= 0 ? PF.parser.parseHeaderLine(text) : {};
+    var found = Object.keys(parsed).filter(function (name) { return parsed[name]; });
+
+    if (found.length) {
+      found.forEach(function (name) { setHeaderField(name, parsed[name]); });
+      if (found.indexOf(field) < 0) setHeaderField(field, '');
+      return;
+    }
+
     var labelName = HEADER_LABELS[field];
     var value = text;
 
@@ -723,6 +743,10 @@
       if (value.indexOf(label) === 0) value = value.slice(label.length).replace(/^[\s:.–-]+/, '');
     }
 
+    setHeaderField(field, value);
+  }
+
+  function setHeaderField(field, value) {
     state.headerEdits[field] = value;
     var input = el[HEADER_INPUTS[field]];
     if (input) input.value = value;

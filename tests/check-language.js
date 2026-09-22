@@ -90,6 +90,23 @@ expect(PF.normalize.clean('\u0003RMike lived with his') === 'Mike lived with his
   + 'not leave a stray "R" behind');
 console.log('  the numbering marker never reaches anything a person reads');
 
+/* --- a question mark is only for a question ------------------------------ */
+
+/*
+ * The question word has to be the whole word. "किस" lives inside "किसी",
+ * which asks nothing at all, and a statement about where water belongs came
+ * back with a question mark on the end of it.
+ */
+var STATEMENT = 'सिरभाव किसी भी सहारे के बिना पानी की ठीक जगह बताते थे';
+var QUESTION = 'नित्य आनंद में कौन रह सकता है';
+
+expect(PF.normalize.polishFragment(STATEMENT, { terminalQuestionMark: true }) === STATEMENT,
+  '"किसी" is not "किस": a statement must not be given a question mark ("'
+  + PF.normalize.polishFragment(STATEMENT, { terminalQuestionMark: true }) + '")');
+expect(PF.normalize.polishFragment(QUESTION, { terminalQuestionMark: true }) === QUESTION + '?',
+  'a Hindi question should still be given its question mark');
+console.log('  a question mark only where something is actually asked');
+
 /* --- the mechanical tier still applies without asking -------------------- */
 
 var mechanical = suggestionsFor([
