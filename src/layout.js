@@ -10,13 +10,12 @@
 (function (PF) {
   'use strict';
 
-  // Ratio of a font's default single line height to its point size.
-  var LINE_FACTOR = { latin: 1.18, devanagari: 1.40 };
   var SAFETY = 0.97; // usable fraction of the text column height
 
+  // One line's height lives in compose.js, because a gap stated in lines has to
+  // be measured with the same ruler the page height is estimated with.
   function lineHeightPt(text, density, fontPt) {
-    var factor = PF.text.hasDevanagari(text) ? LINE_FACTOR.devanagari : LINE_FACTOR.latin;
-    return fontPt * factor * density.line;
+    return PF.compose.lineHeightPt(text, density, fontPt);
   }
 
   function blockText(block) {
@@ -95,15 +94,26 @@
     var maxPages = options.maxPages || 2;
 
     if (options.densityId && options.densityId !== 'auto') {
-      var forced = densities.filter(function (d) { return d.id === options.densityId; })[0] || densities[1];
+      var forced = densities.filter(function (d) { return d.id === options.densityId; })[0]
+        || byId(densities, 'normal') || densities[0];
       return build(paper, forced, options, maxPages, false);
     }
 
-    for (var i = 0; i < densities.length; i++) {
-      var result = build(paper, densities[i], options, maxPages, true);
+    // Automatic never reaches for a setting that only makes sense as a choice:
+    // a two-line gap is something you ask for, not something a short paper
+    // should fall into because it happens to have room.
+    var ladder = densities.filter(function (d) { return !d.manualOnly; });
+    if (!ladder.length) ladder = densities;
+
+    for (var i = 0; i < ladder.length; i++) {
+      var result = build(paper, ladder[i], options, maxPages, true);
       if (result.pageCount <= maxPages) return result;
     }
-    return build(paper, densities[densities.length - 1], options, maxPages, true);
+    return build(paper, ladder[ladder.length - 1], options, maxPages, true);
+  }
+
+  function byId(densities, id) {
+    return densities.filter(function (d) { return d.id === id; })[0];
   }
 
   function build(paper, density, options, maxPages, auto) {

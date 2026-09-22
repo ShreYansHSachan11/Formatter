@@ -250,6 +250,82 @@ function run(testCase) {
 console.log('Content integrity');
 CASES.forEach(run);
 
+/*
+ * The two-line spacing, end to end.
+ *
+ * A gap stated in lines has to survive all the way to the writers, and the
+ * plain-text version is where that is easiest to get wrong: it turns a gap
+ * into blank lines, and used to allow exactly one however large the gap was.
+ * Nothing else may change - the same words, the same questions, on a paper
+ * that is simply taller.
+ */
+(function checkSpacious() {
+  var prepared = PF.normalize.prepare(PF.samples.english);
+  var paper = PF.parser.parse(prepared.lines, {
+    properNouns: PF.normalize.buildProperNounMap(prepared.lines),
+    acceptedSuggestions: [],
+    fontSizePt: 12
+  });
+
+  function textAt(densityId) {
+    var options = Object.assign({}, OPTIONS, { densityId: densityId });
+    return PF.renderText.render(PF.layout.fit(paper, options));
+  }
+
+  var spacious = textAt('spacious');
+  var roomy = textAt('roomy');
+
+  var questions = (spacious.match(/\n\n\nQue \d+\./g) || []).length;
+  if (questions < paper.questions.length - 1) {
+    fail('spacious spacing', 'expected two blank lines above every question but the '
+      + 'first, found ' + questions + ' of ' + (paper.questions.length - 1));
+  }
+  if (/\n{5,}/.test(spacious)) {
+    fail('spacious spacing', 'more than two blank lines in a row in the copied text');
+  }
+  if (/\n\n\nQue \d+\./.test(roomy)) {
+    fail('roomy spacing', 'only the two-line setting may leave two blank lines');
+  }
+  if (tokens(spacious).join(' ') !== tokens(roomy).join(' ')) {
+    fail('spacious spacing', 'the spacing changed the words of the paper');
+  }
+
+  /*
+   * Two lines means two lines of the font in use. A gap frozen at a number of
+   * points is two lines at 12pt, one and a half at 16pt, and too small to see
+   * in a Hindi paper, where a line is a good deal taller.
+   */
+  function gapPt(densityId, fontSizePt, sample) {
+    var source = PF.normalize.prepare(PF.samples[sample || 'english']);
+    var parsed = PF.parser.parse(source.lines, {
+      properNouns: {}, acceptedSuggestions: [], fontSizePt: fontSizePt
+    });
+    var result = PF.layout.fit(parsed, Object.assign({}, OPTIONS,
+      { densityId: densityId, fontSizePt: fontSizePt, maxPages: 99 }));
+    var gaps = result.blocks.filter(function (block) { return block.blankLinesBefore; });
+    return gaps.length ? gaps[0].spaceBeforePt : 0;
+  }
+
+  var small = gapPt('spacious', 12);
+  var large = gapPt('spacious', 16);
+  if (!(large > small * 1.25)) {
+    fail('spacious spacing', 'the gap should grow with the font: ' + small + 'pt at 12pt '
+      + 'became ' + large + 'pt at 16pt');
+  }
+  if (!(gapPt('spacious', 12, 'hindi') > small)) {
+    fail('spacious spacing', 'a Hindi line is taller, so two Hindi lines must be a '
+      + 'bigger gap than two English ones');
+  }
+
+  var automatic = PF.layout.fit(paper, Object.assign({}, OPTIONS, { densityId: 'auto' }));
+  if (automatic.density.id === 'spacious') {
+    fail('spacious spacing', 'automatic spacing must never choose a setting that is '
+      + 'only offered by name');
+  }
+  console.log('  two-line spacing - ' + questions + ' two-line gaps, same words as Roomy, '
+    + 'never chosen automatically');
+})();
+
 if (failures.length) {
   console.error('\nFAILED (' + failures.length + ')');
   failures.forEach(function (message) { console.error('  - ' + message); });

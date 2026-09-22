@@ -220,9 +220,37 @@ the first one that fits is used:
 
     roomy → normal → tight → tighter → compact → ultra compact
 
+(Spacious sits above roomy in the menu, but not on this ladder — see below.)
+
 The estimate is slightly pessimistic on purpose: a paper that spills onto a
 third page is a worse failure than one that comes out a little tighter than it
 needed to be.
+
+### A spacing you ask for by name
+
+Above that ladder sits **Spacious (2-line gap)**: two blank lines between
+questions, for a paper meant to be written on between them. It is different
+from the others in two ways.
+
+It states its gap in *lines*, not in points, and the gap is measured against
+the font actually in use — so two lines stays two lines at 14pt, and stays two
+lines in a Hindi paper, where a line is a good deal taller than in an English
+one. `compose.js` owns that measurement and `layout.js` estimates page heights
+with the same ruler, so the two can never drift apart.
+
+And the automatic ladder skips it (`manualOnly`). Automatic picks the loosest
+setting that still fits, and a short paper would otherwise spread itself out
+because it happened to have room — a two-line gap is a decision about the
+paper, not a fallback. For the same reason "No gap between questions" is
+switched off while it is chosen: the two ask for opposite things, and the
+spacing was picked by name.
+
+Three things had to follow the gap out to the edges: the plain-text version
+turns it into two blank lines rather than the one it always used to allow; the
+`.docx` sets Word's `suppressSpBfAfterPgBrk`, so a question landing at the top
+of a page sits at the top, as the preview and the page estimate both assume;
+and the overflow note names the spacing you chose instead of blaming the
+length of the paper.
 
 ## Project layout
 

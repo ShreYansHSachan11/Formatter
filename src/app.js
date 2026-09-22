@@ -49,6 +49,7 @@
     ].forEach(function (id) { el[id] = $(id); });
 
     fillDensityOptions();
+    syncNoGapState();
     bindEvents();
   }
 
@@ -108,6 +109,7 @@
 
     ['optPages', 'optDensity', 'optLatinFont', 'optHindiFont', 'optFontSize', 'optPrefix', 'optNoGap']
       .forEach(function (id) { el[id].addEventListener('change', refresh); });
+    el.optDensity.addEventListener('change', syncNoGapState);
 
     [['hdrSubject', 'subject'], ['hdrClass', 'className'], ['hdrTime', 'time'],
       ['hdrMarks', 'maxMarks'], ['hdrSchool', 'school'], ['hdrExam', 'exam']]
@@ -162,7 +164,25 @@
 
   /* -------------------------------------------------------------- pipeline */
 
+  function chosenDensity() {
+    var id = el.optDensity.value;
+    return PF.compose.DENSITIES.filter(function (d) { return d.id === id; })[0] || null;
+  }
+
+  /*
+   * "Spacious" and "No gap between questions" ask for opposite things. Rather
+   * than let one of them silently win, the checkbox is switched off while a
+   * spacing chosen for its gap is in force - the spacing was picked by name,
+   * the checkbox only ever says "less".
+   */
+  function syncNoGapState() {
+    var density = chosenDensity();
+    el.optNoGap.disabled = !!(density && density.gapQuestionLines);
+    el.optNoGap.parentNode.classList.toggle('disabled', el.optNoGap.disabled);
+  }
+
   function readOptions() {
+    syncNoGapState();
     return {
       fontSizePt: parseInt(el.optFontSize.value, 10) || 12,
       latinFont: el.optLatinFont.value,
@@ -170,7 +190,7 @@
       questionPrefix: el.optPrefix.value,
       maxPages: parseInt(el.optPages.value, 10) || 2,
       densityId: el.optDensity.value,
-      noQuestionGap: el.optNoGap.checked,
+      noQuestionGap: el.optNoGap.checked && !el.optNoGap.disabled,
       edits: state.edits,
       inserts: state.inserts
     };
@@ -789,9 +809,15 @@
       el.statusLine.textContent = 'No questions found';
       el.statusLine.className = 'status warn';
     } else if (result.overflow) {
+      // Whose fault the extra page is depends on who chose the spacing. Telling
+      // someone who asked for a two-line gap that the paper is "at the tightest
+      // spacing" sends them off to shorten a question they need not touch.
       el.previewNote.classList.add('warn');
-      el.previewNote.textContent = 'This paper still needs ' + pages + ' pages at the tightest spacing. '
-        + 'Shorten a question, or allow ' + pages + ' pages.';
+      el.previewNote.textContent = result.auto
+        ? 'This paper still needs ' + pages + ' pages at the tightest spacing. '
+          + 'Shorten a question, or allow ' + pages + ' pages.'
+        : 'This paper needs ' + pages + ' pages at "' + result.density.label + '" spacing. '
+          + 'Choose Auto to fit it into ' + limit + ', or allow ' + pages + ' pages.';
     } else if (limit < 99) {
       el.previewNote.classList.remove('warn');
       el.previewNote.textContent = 'Fits in ' + pages + ' page' + (pages === 1 ? '' : 's')

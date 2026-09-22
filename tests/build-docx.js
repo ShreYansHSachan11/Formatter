@@ -57,17 +57,28 @@ function buildOne(name, sourceText, extra) {
     var file = path.join(OUT, name + '.docx');
     fs.writeFileSync(file, Buffer.from(buffer));
     return JSZip.loadAsync(buffer).then(function (zip) {
-      return zip.file('word/document.xml').async('string');
-    }).then(function (xml) {
-      report(name, file, xml, result, extra);
+      return Promise.all([
+        zip.file('word/document.xml').async('string'),
+        zip.file('word/settings.xml').async('string')
+      ]);
+    }).then(function (parts) {
+      report(name, file, parts[0], result, extra, parts[1]);
     });
   });
 }
 
 var failed = 0;
 
-function report(name, file, xml, result, extra) {
+function report(name, file, xml, result, extra, settingsXml) {
   var checks = {
+    // Word keeps a paragraph's space-before even at the top of a page, which
+    // would leave the two-line setting starting a page two lines down while
+    // the preview shows it at the top.
+    'space before suppressed after a page break':
+      /suppressSpBfAfterPgBrk/.test(settingsXml || ''),
+    // 2 lines x 12pt x 1.18 x 1.15 line spacing = 33pt = 660 twips.
+    'two-line gap between questions':
+      name !== 'spacious' || /w:before="660"/.test(xml),
     'page size A4 (11906 x 16838 twips)': /w:w="11906"/.test(xml) && /w:h="16838"/.test(xml),
     'font size 24 half-points (12pt)': /w:sz w:val="24"/.test(xml),
     'complex-script size set': /w:szCs w:val="24"/.test(xml),
@@ -106,6 +117,10 @@ buildOne('english')
       edits: { 'q0.head': 'Que 1. Ticked by hand:' },
       inserts: { 'q0.head': ['Added by hand, under the question'] }
     });
+  })
+  .then(function () {
+    // The same paper with two blank lines between the questions to write in.
+    return buildOne('spacious', PF.samples.english, { densityId: 'spacious' });
   })
   .then(function () {
     if (!extra) return null;

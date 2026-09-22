@@ -302,3 +302,5 @@ details summary { cursor: pointer; font-size: 12.5px; color: var(--accent); marg
 
 .check { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--ink); }
 .check input { width: auto; margin: 0; }
+/* Switched off while a spacing chosen for its gap is in force. */
+.check.disabled { opacity: 0.45; cursor: not-allowed; }

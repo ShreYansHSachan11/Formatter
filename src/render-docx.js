@@ -203,6 +203,12 @@
     var density = result.density;
 
     return new docx.Document({
+      // A gap belongs between two questions, not above the first line of a
+      // page. Word otherwise keeps the space it was given after a page break,
+      // which is barely visible at 7pt and half an inch of wasted paper at the
+      // two-line setting - and it is the one place where the document would
+      // stop matching the preview, which drops that gap at the top of a page.
+      compatibility: { suppressSpBfAfterPgBrk: true },
       styles: {
         default: {
           document: {

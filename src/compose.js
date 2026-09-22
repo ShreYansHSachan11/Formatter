@@ -14,7 +14,21 @@
 
   var PAGE = { widthIn: 8.2681, heightIn: 11.6931 }; // A4 = 210 x 297 mm (11906 x 16838 twips)
 
+  // Ratio of a font's default single line height to its point size. Kept here
+  // because both the height estimate and a gap measured in lines need it.
+  var LINE_FACTOR = { latin: 1.18, devanagari: 1.40 };
+
+  /*
+   * "Spacious" is the only setting that asks for a gap in lines rather than in
+   * points: two blank lines between questions, so the paper can be written on
+   * between them. It is marked manualOnly because the automatic ladder picks
+   * the loosest setting that still fits the page budget, and a two-line gap is
+   * a deliberate choice about the paper, not a fallback for a short one.
+   */
   var DENSITIES = [
+    { id: 'spacious', label: 'Spacious (2-line gap)', manualOnly: true,
+      marginTopIn: 0.75, marginBottomIn: 0.65, marginXIn: 0.75, line: 1.15,
+      gapQuestionLines: 2, gapQuestionPt: 32, gapSubPt: 3, gapHeaderPt: 10 },
     { id: 'roomy',   label: 'Roomy',        marginTopIn: 0.75, marginBottomIn: 0.65, marginXIn: 0.75, line: 1.10, gapQuestionPt: 7, gapSubPt: 2, gapHeaderPt: 8 },
     { id: 'normal',  label: 'Normal',       marginTopIn: 0.65, marginBottomIn: 0.55, marginXIn: 0.65, line: 1.05, gapQuestionPt: 5, gapSubPt: 1, gapHeaderPt: 6 },
     { id: 'tight',   label: 'Tight',        marginTopIn: 0.55, marginBottomIn: 0.45, marginXIn: 0.60, line: 1.00, gapQuestionPt: 4, gapSubPt: 0, gapHeaderPt: 5 },
@@ -29,6 +43,23 @@
 
   function contentWidthIn(density) {
     return PAGE.widthIn - 2 * density.marginXIn;
+  }
+
+  /** One line of text at this font size and line spacing, in points. */
+  function lineHeightPt(text, density, fontPt) {
+    var factor = PF.text.hasDevanagari(text || '') ? LINE_FACTOR.devanagari : LINE_FACTOR.latin;
+    return (fontPt || 12) * factor * density.line;
+  }
+
+  /**
+   * The gap above a question. Most settings state it in points; a setting that
+   * states it in lines is measured against the font actually in use, so "two
+   * lines" stays two lines at 11pt, at 14pt and in a Hindi paper - where a line
+   * is a good deal taller than in an English one.
+   */
+  function questionGapPt(density, options, text) {
+    if (!density.gapQuestionLines) return density.gapQuestionPt;
+    return Math.round(density.gapQuestionLines * lineHeightPt(text, density, options.fontSizePt));
   }
 
   /** The widest cell in each column, for a given column count. */
@@ -289,7 +320,9 @@
       hangingIn: 0,
       spaceBeforePt: isFirst
         ? density.gapHeaderPt
-        : (options.noQuestionGap ? 0 : density.gapQuestionPt)
+        : (options.noQuestionGap ? 0 : questionGapPt(density, options, question.heading)),
+      // What the gap means, for the writers that have lines rather than points.
+      blankLinesBefore: isFirst || options.noQuestionGap ? 0 : (density.gapQuestionLines || 0)
     });
 
     if (question.kind === 'mcq') {
@@ -440,9 +473,12 @@
   PF.compose = {
     PAGE: PAGE,
     DENSITIES: DENSITIES,
+    LINE_FACTOR: LINE_FACTOR,
     INDENT: INDENT,
     COLUMN_GAP_IN: COLUMN_GAP_IN,
     contentWidthIn: contentWidthIn,
+    lineHeightPt: lineHeightPt,
+    questionGapPt: questionGapPt,
     packColumns: packColumns,
     labelFor: labelFor,
     compose: compose

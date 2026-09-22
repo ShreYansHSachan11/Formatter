@@ -40,15 +40,29 @@
     return text;
   }
 
+  var MAX_BLANK_LINES = 2;
+
+  /*
+   * Blank lines where the layout leaves a visible gap, so the plain-text
+   * version breathes the same way the document does. A setting that asks for
+   * its gap in lines says how many; anything else gets one.
+   */
+  function blankLinesBefore(block) {
+    if (block.blankLinesBefore) return Math.min(block.blankLinesBefore, MAX_BLANK_LINES);
+    return (block.spaceBeforePt || 0) >= 4 ? 1 : 0;
+  }
+
   function render(result) {
     var lines = [];
     result.blocks.forEach(function (block, index) {
-      // A blank line where the layout leaves a visible gap, so the plain-text
-      // version breathes the same way the document does.
-      if (index > 0 && (block.spaceBeforePt || 0) >= 4) lines.push('');
+      if (index > 0) {
+        for (var i = 0; i < blankLinesBefore(block); i++) lines.push('');
+      }
       lines.push(renderBlock(block));
     });
-    return lines.join('\n').replace(/\n{3,}/g, '\n\n');
+    return lines.join('\n')
+      .replace(new RegExp('\\n{' + (MAX_BLANK_LINES + 2) + ',}', 'g'),
+        new Array(MAX_BLANK_LINES + 2).join('\n'));
   }
 
   PF.renderText = { render: render };
