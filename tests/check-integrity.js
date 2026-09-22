@@ -109,8 +109,9 @@ var CASES = [
     name: 'hindi-wrapped fixture (a paper whose lines were broken by hand)',
     text: fs.readFileSync(path.join(__dirname, 'fixtures', 'hindi-wrapped.txt'), 'utf8'),
     kinds: ['list', 'mcq', 'list', 'list', 'list', 'plain', 'list', 'plain', 'list', 'inline',
-      'list', 'list'],
-    marks: ['1x2', '1x5', '1x5', '1x5', '2x5', '1x2', '1x5', '', '1x3', '1x5', '1x2', '1x2'],
+      'list', 'list', 'list'],
+    marks: ['1x2', '1x5', '1x5', '1x5', '2x5', '1x2', '1x5', '', '1x3', '1x5', '1x2', '1x2',
+      '1x2'],
     maxPages: 3,
     // Every line here that was broken in the middle is put back together: the
     // rest of a statement, the rest of a word list, the rest of an option and
@@ -130,7 +131,11 @@ var CASES = [
       /^\s*खिदमत, ज्ञात, सूम, प्रलय, संयोग, प्रचुर, शुक्राचार्य, लवण शाश्वत, तूलिका$/m,
       /^\s*\(ग\) चित्रकार की खबर लेने के लिए राजा ने कितने समय पश्चात अहलकार को भेजा\?$/m,
       /^\s*प्रश्न 6\. अपनी पाठ्य पुस्तक से आठ लाइन की कविता लिखिए जो इस प्रश्न पत्र में ना आया हो।\t\(1x2\)$/m,
-      /^\s*प्रश्न 7\. निम्नलिखित शब्दों के संधि विच्छेद कीजिए तथा संधि का नाम लिखिए।\t\(1x5\)$/m,
+      // A heading broken in two takes the second line and stops there: after
+      // its marks come off it ends in the middle of a sentence, and the words
+      // the question is about are on the line below, where they were typed.
+      /^\s*प्रश्न 7\. निम्नलिखित शब्दों के संधि विच्छेद कीजिए तथा संधि का नाम लिखिए\t\(1x5\)$/m,
+      /^\s*विद्यार्थी, रविंद्र, रजनीश, इत्यादि, गायक$/m,
       /^\s*\(ग\) लेखक दुर्घटना के बाद जाना चाह रहा था-$/m,
       /^\s*\(क\) आकाश_ पाताल का अंतर होना _$/m,
       /\(द\) एक सौ तीस बच्चे \( \)$/m,
@@ -145,7 +150,12 @@ var CASES = [
       // exactly what makes a line look unfinished. A quoted poem is left
       // alone whatever its punctuation.
       /^\s*हिमालय के आँगन में उसे प्रथम किरणों का दे उपहार$/m,
-      /^\s*उषा ने हँस अभिवादन किया और पहनाया हीरक हार$/m
+      /^\s*उषा ने हँस अभिवादन किया और पहनाया हीरक हार$/m,
+      // A heading too short to have reached the edge of the page. The only
+      // evidence that it continues is the marks at the end of the line below
+      // it, which is why a heading is put back together before they are
+      // lifted off it.
+      /^\s*प्रश्न 13\. विलोम शब्द लिखिए तथा वाक्य बनाइए\t\(1x2\)$/m
     ],
     // Nothing in a Hindi paper is given a colon it was not typed with, and no
     // question mark is invented for a sentence that is not asking anything.

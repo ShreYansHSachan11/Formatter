@@ -531,21 +531,29 @@
    * The same rule for a question's heading: "...संधि विच्छेद कीजिए तथा संधि का"
    * is half a sentence, and the half below it is the rest of the heading - not
    * the first item of the question, and certainly not a column to match.
+   *
+   * One line, and one only. A heading that is broken is broken in two, and the
+   * line after the second one belongs to the question however that second line
+   * happens to end - question 7 asked for the sandhi of five words and took
+   * the words into its heading as well, because the line carrying them read as
+   * one more piece of the same sentence. The marks stop it too: they are the
+   * end of an instruction, always, which is why this runs before they are
+   * lifted off and not after.
    */
   function foldHeadingContinuation(raw, ctx) {
-    while (raw.bodyLines.length) {
-      var heading = PF.normalize.clean(raw.heading);
-      if (!continuesHeading(heading, raw, ctx)) return;
+    if (!raw.bodyLines.length) return;
 
-      raw.heading = PF.text.collapseSpaces(heading + ' '
-        + PF.normalize.clean(raw.bodyLines.shift()));
+    var heading = PF.normalize.clean(raw.heading);
+    if (!continuesHeading(heading, raw, ctx)) return;
 
-      // The marks were on the half that had been left behind.
-      var marks = raw.heading.match(MARKS_RE);
-      if (marks) {
-        if (!raw.marks) raw.marks = tidyMarks(marks[1]);
-        raw.heading = raw.heading.slice(0, marks.index);
-      }
+    raw.heading = PF.text.collapseSpaces(heading + ' '
+      + PF.normalize.clean(raw.bodyLines.shift()));
+
+    // The marks were on the half that had been left behind.
+    var marks = raw.heading.match(MARKS_RE);
+    if (marks) {
+      if (!raw.marks) raw.marks = tidyMarks(marks[1]);
+      raw.heading = raw.heading.slice(0, marks.index);
     }
   }
 
@@ -1163,7 +1171,6 @@
   }
 
   function buildQuestion(raw, ctx) {
-    foldHeadingContinuation(raw, ctx);
     var heading = polishHeading(raw.heading, ctx);
     var nodes = groupStackedOptions(toRawNodes(raw.bodyLines, raw.heading, ctx), raw.heading);
     var kind = classify(raw.heading, nodes);
@@ -1386,6 +1393,10 @@
       if (current) current.bodyLines.push(line);
     });
 
+    // Putting a broken heading back together comes first: the marks sit at the
+    // end of the instruction, so the heading has to be whole before they are
+    // looked for, and finding them is what tells the heading it is complete.
+    rawQuestions.forEach(function (raw) { foldHeadingContinuation(raw, ctx); });
     rawQuestions.forEach(liftStrayMarks);
 
     var headerLines = lines.slice(0, firstQuestion < 0 ? lines.length : firstQuestion);

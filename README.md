@@ -166,10 +166,23 @@ it, and every one of them on its own is far too weak:
 
 Together they separate a wrap from a list: `The fox ____ the wolf to an old
 house` is followed by another line with a blank in it, so neither is folded,
-and `Hot` followed by `Cold` is far too short to have run out of room. A
-heading has one further piece of evidence — the marks. A heading whose marks
-are sitting at the end of the line below it was broken in two, however far
-across the page it happened to reach.
+and `Hot` followed by `Cold` is far too short to have run out of room.
+
+**A heading takes one line, and one only.** A heading that is broken is broken
+in two, and the line after the second one belongs to the question however that
+second line happens to end:
+
+    प्रश्न 7 निम्नलिखित शब्दों के संधि विच्छेद कीजिए तथा संधि का
+         नाम लिखिए ( 1x5 )
+         विद्यार्थी , रविंद्र, रजनीश,  इत्यादि , गायक
+
+Once the marks come off, `...तथा संधि का नाम लिखिए` still ends in the middle of
+a sentence — so without the one-line rule the five words the question is about
+were drawn into the heading too. The marks stop it as well: they are the end of
+an instruction, always, which is why a broken heading is put back together
+*before* they are lifted off it rather than after. That order is also what lets
+a heading too short to have reached the edge of the page be recognised at all —
+there, the marks on the line below are the only evidence there is.
 
 ### What a question quotes is not a list
 
