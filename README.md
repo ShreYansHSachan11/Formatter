@@ -431,7 +431,11 @@ half of room to write, and it is printed twice on one sheet and cut in half.
 Two things make it work. The room to write goes: a line with nothing on it but
 blanks is not a question — the question above it already says what to write —
 and it is the first thing to give up when two papers have to share a sheet.
-Blanks *inside* a question stay, because `अ __ ऋ __ इ __` is the question.
+Numbering it changes nothing, so each part of a line is judged with its own
+number taken off first and `1. ____   2. ____` goes the same way. Blanks
+*inside* a question stay, because `अ __ ऋ __ इ __` is the question, and so does
+a whole line when one part of it still asks something: `1. ज + ल = ____` says
+what to join, and a row of pairs to match is the question itself.
 
 And the cut is put halfway down the sheet rather than wherever the first copy
 happens to end, so both halves are the same size and one straight cut through

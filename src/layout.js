@@ -131,12 +131,28 @@
    * through the middle gives two identical papers.
    */
   var WRITING_ROOM_RE = /^[\s_.…—–-]*$/;
+  var ITEM_LABEL_RE = /^\s*\(?\s*(?:[0-9]{1,2}|[ivxlcIVXLC]{1,4}|[A-Za-z]|[अ-ह])\s*[)\].–—-]+\s*/;
   var CUT_BREATH_PT = 10;
 
+  /*
+   * A numbered blank is still a blank. "Write the vowels" followed by
+   * "1. ____   2. ____" numbers the room to write in; it asks nothing
+   * further, so every part of a line is judged with its own number taken off
+   * first. "1. ज + ल = ____" still asks something without its number and so
+   * it stays, and one part worth reading keeps the whole line - which is what
+   * leaves a matching question, and a blank with a word in front of it, alone.
+   */
   function isWritingRoom(block) {
     if (block.type === 'rule' || block.type === 'header' || block.type === 'header-row') return false;
-    var text = blockText(block).replace(/[\u0001\u0002\u0003]/g, ' ');
-    return text.trim() !== '' && WRITING_ROOM_RE.test(text);
+    var parts = block.cells || [blockText(block)];
+    var anything = false;
+    for (var i = 0; i < parts.length; i++) {
+      var text = String(parts[i]).replace(/[\u0001\u0002\u0003]/g, ' ');
+      if (text.trim() === '') continue;
+      anything = true;
+      if (!WRITING_ROOM_RE.test(text.replace(ITEM_LABEL_RE, ''))) return false;
+    }
+    return anything;
   }
 
   /** The same line again, with nothing that ties it to the one it came from. */

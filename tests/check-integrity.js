@@ -528,6 +528,31 @@ CASES.forEach(run);
   }
 
   /*
+   * Room to write is still room to write when it is numbered. A row reading
+   * "1. ____   2. ____" is the answer to the question above it and nothing
+   * more, so it goes with the rest of the writing room - while a row whose
+   * parts say something once their numbers are off ("1. ज + ल = ____") and a
+   * row of pairs to match both stay, because they are the question itself.
+   */
+  var lkgSource = fs.readFileSync(path.join(__dirname, 'fixtures', 'lkg-hindi.txt'), 'utf8');
+  var lkgPrepared = PF.normalize.prepare(lkgSource);
+  var lkgPaper = PF.parser.parse(lkgPrepared.lines, {
+    properNouns: {}, acceptedSuggestions: [], fontSizePt: 12
+  });
+  var lkgText = PF.renderText.render(PF.layout.fit(lkgPaper,
+    Object.assign({}, OPTIONS, { maxPages: 1, twoUp: true })));
+
+  if (/^\s*\d+\.\s*_+(?:\s+\d+\.\s*_+)*\s*$/m.test(lkgText)) {
+    fail('two copies on one sheet', 'a row of numbered blanks is room to write in and '
+      + 'should have gone');
+  }
+  [/1\. ज \+ ल = _+/, /1\. म = _+/, /\(क\) कल/].forEach(function (pattern) {
+    if (!pattern.test(lkgText)) {
+      fail('two copies on one sheet', pattern + ' asks something of its own and must stay');
+    }
+  });
+
+  /*
    * The cut goes halfway down the sheet, not wherever the first copy happens
    * to end - otherwise a short paper is printed as a strip at the top and a
    * strip in the middle, and the two halves are different sizes. Measured on a
