@@ -100,7 +100,7 @@ one of those cases; take the guards out and it fails.
 | No blank lines | Questions are separated by a small typographic gap (2–7 pt) instead of empty lines. Tick **No gap between questions** for none at all, or choose **Spacious (2-line gap)** for two blank lines to write between. |
 | Two pages | The paper is measured and the spacing is tightened automatically until it fits. If even the tightest setting needs three pages, you are told rather than silently given a third page. |
 | Options in a row | Tick-box options are laid out horizontally on one line, whether they were typed side by side or one below the other. Each column is measured separately, so one long choice no longer pushes the rest onto their own lines. If they genuinely will not fit, they wrap to evenly filled rows. |
-| Short answers in a row | One-word items (word meanings, opposites, plurals, spellings, word pairs) are packed several per line instead of one line each. How many fit is measured from the widest item, so bare words sit five across and items with a blank to fill sit two or three across. |
+| Short answers in a row | One-word items (word meanings, opposites, plurals, spellings, word pairs) are packed several per line instead of one line each — two of them are enough. How many fit is measured from the widest item, so bare words sit five across and items with a blank to fill sit two or three across. |
 | Match the following | Two columns at a fixed tab stop, at least a third of the page wide, so they never look cramped. A question only becomes a match when it really is one — see below. |
 | Language fixes | Mechanical fixes are applied automatically; anything that could change meaning is offered as a tick-box suggestion. |
 
@@ -315,6 +315,15 @@ must start a label of the same sequence, jumping a whole column ahead of the
 first ("I … IV", never "a … b"), and neither half may be long. A matching
 question is never split this way.
 
+There is one exception, and the blank is what earns it:
+
+    4. क + ल+ श = ______        5. च + म + न ______
+
+Those labels merely run on, which is also the shape of a matching pair — but a
+matching question never holds a blank. So where *every* half of the line has a
+blank to fill in, two items that run on are two items. `(क) कल   (ख) टब` has
+no blank in it and stays one pair, even in a question that never says "match".
+
 **"I" is a letter and a roman numeral both.** Which one it is cannot be read off
 the label; it is read off the labels beside it. Where any label in the group is
 unmistakably roman — "IV", "ii" — the ambiguous ones are roman too. Getting this
@@ -523,6 +532,11 @@ separate faults came from at once.
 
 `tests/fixtures/loose-spacing.txt` is a paper typed with double spaces
 everywhere — the case that used to break the parser. Keep it in the suite.
+
+`tests/fixtures/lkg-hindi.txt` is an L.K.G paper of blanks: two blanks that
+have to share a line, five that already do, items typed two to a line with a
+blank in each, and a matching question underneath to prove the two are still
+told apart.
 
 `tests/fixtures/pg-hindi.txt` is a nursery paper — five short questions, a
 matching column and a line of nothing but blanks — used to check that two

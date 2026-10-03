@@ -178,6 +178,26 @@ var CASES = [
       /\d\. कंफूका/, /कीजिए \| कंफूका/]
   },
   {
+    name: 'lkg-hindi fixture (a nursery paper of blanks to fill)',
+    text: fs.readFileSync(path.join(__dirname, 'fixtures', 'lkg-hindi.txt'), 'utf8'),
+    kinds: ['inline', 'inline', 'inline', 'inline', 'plain', 'plain', 'match'],
+    marks: ['5', '5', '5', '5', '5', '5', '5'],
+    lines: [
+      // Two blanks go on one line, the same as five do. A paper that puts five
+      // across a line and then two down two lines is not laying anything out.
+      /^\s*1\. _+\t2\. _+$/m,
+      /^\s*1\. _+\t2\. _+\t3\. _+\t4\. _+\t5\. _+$/m,
+      // Items four and five were typed side by side with a tab between them.
+      // Labels that run on like that are normally left alone, because that is
+      // also the shape of a matching pair - but a pair never holds a blank.
+      /^\s*4\. क \+ ल\+ श = _+\t5\. च \+ म \+ न _+$/m,
+      /^\s*4\. भ = _+\t5\. ध = _+$/m,
+      // And the matching question is still two columns, not ten items.
+      /^\s*\(क\) कल\t+टब$/m,
+      /^\s*\(ङ\) सर\t+धन$/m
+    ]
+  },
+  {
     name: 'letter-spaced fixture (words written out letter by letter)',
     text: fs.readFileSync(path.join(__dirname, 'fixtures', 'letter-spaced.txt'), 'utf8'),
     kinds: ['inline'],
@@ -424,6 +444,32 @@ CASES.forEach(run);
       + header.school + '" / "' + header.exam + '"');
   }
   console.log('  header - a single field on the fourth line stays centred, titles tidied');
+})();
+
+/*
+ * Two items side by side, or two columns to be matched?
+ *
+ * "4. क + ल+ श = ____    5. च + म + न ____" is two items that happen to share
+ * a line. "(क) कल    (ख) टब" is one pair, and splitting it would destroy the
+ * question. They look alike - labels that simply run on - and what tells them
+ * apart is the blank: a matching question never holds one.
+ */
+(function checkPairsSurvive() {
+  // A matching question that never says "match" - so nothing but the shape of
+  // the line is keeping its two columns together.
+  var lines = ['प्रश्न 1. जोड़ी बनाइए। (5)',
+    '(क) कल\t(ख) टब',
+    '(ग) रथ\t(घ) सर'];
+  var prepared = PF.normalize.prepare(lines.join('\n'));
+  var question = PF.parser.parse(prepared.lines, {
+    properNouns: {}, acceptedSuggestions: [], fontSizePt: 12
+  }).questions[0];
+
+  if (question.kind !== 'match' || question.pairs.length !== 2) {
+    fail('pairs survive', 'two columns to be matched became ' + question.kind + ' with '
+      + question.items.length + ' items and ' + question.pairs.length + ' pairs');
+  }
+  console.log('  pairs - two columns stay two columns when the labels merely run on');
 })();
 
 /*

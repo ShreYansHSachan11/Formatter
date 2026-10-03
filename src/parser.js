@@ -402,6 +402,15 @@
       .filter(Boolean);
     if (parts.length < 2) return null;
 
+    /*
+     * Two items side by side with labels that simply run on - "4. ... 5. ..." -
+     * are normally left alone, because that is also the shape of a matching
+     * pair ("(क) कल   टब") and splitting one of those destroys it. A line where
+     * every half has a blank to fill in cannot be a pair: a matching question
+     * never holds a blank. So there the two halves are two items.
+     */
+    var toWriteOn = parts.every(function (part) { return BLANK_OR_BOX_RE.test(part); });
+
     var items = [];
     for (var i = 0; i < parts.length; i++) {
       if (parts[i].length > MAX_TABBED_ITEM_CHARS) return null;
@@ -419,7 +428,7 @@
       // The second column carries on where the first one ends, so its number
       // jumps ahead by a whole column: "I ... IV". Two labels that simply run
       // on ("a ... b") are a list, or the two halves of a matching pair.
-      if (!continuesAcrossColumns(items[i - 1], stripped)) return null;
+      if (!toWriteOn && !continuesAcrossColumns(items[i - 1], stripped)) return null;
       items.push(stripped);
     }
 
@@ -1329,10 +1338,21 @@
     ensureLabels(counted, { script: scriptOf(question) });
     question.items = orderByLabel(question.items);
 
+    /*
+     * Short items sit several to a line. Two of them are enough to do it: a
+     * paper that writes five blanks across one line and then two blanks down
+     * two lines is not laying anything out, it is just following how many
+     * there happened to be. The earlier "three or more" left
+     *
+     *     1. __________
+     *     2. __________
+     *
+     * taking two lines of a nursery paper where one would do.
+     */
     if (!question.items.length) {
       question.kind = 'plain';
     } else if (counted.length === question.items.length
-      && question.items.length >= 3 && question.items.every(function (item) {
+      && question.items.length >= 2 && question.items.every(function (item) {
         return !item.box && isShortItem(item.text, ctx.fontSizePt);
       })) {
       question.kind = 'inline';
