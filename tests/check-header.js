@@ -97,6 +97,15 @@ var CASES = [
     expect: { exam: 'Standard Examination 2026-27', className: '6', time: '2:30', maxMarks: '50' }
   },
   {
+    // The classes below class 1 have names rather than numbers. "P.G" is one
+    // of them, and the rule that a class must look like a class turned it down.
+    name: 'a class with no number in it',
+    lines: ['S.S. Academy Koirauna Bhadohi', 'Half yearly examination 2026- 27', 'Sub - Hindi',
+      'Time : 2:30\tClass - P.G\tM.M 40'],
+    expect: { school: 'S.S. ACADEMY KOIRAUNA BHADOHI', subject: 'Hindi', className: 'P.G',
+      time: '2:30', maxMarks: '40' }
+  },
+  {
     name: 'labels in Hindi',
     lines: ['एस.एस. एकेडमी कोइरौना भदोही', 'अर्धवार्षिक परीक्षा 2026-27',
       'विषय- हिंदी', 'समय_ 2:30    कक्षा- 5    पूर्णांक__50'],

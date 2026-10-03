@@ -270,7 +270,12 @@
    * papers in the country and an ordinary word in the other half, and without
    * this the exam line of a "STANDARD EXAMINATION" would be read as a class.
    */
-  var INFANT_CLASSES = /^(nursery|prep|play\s*group|[lu]?\.?k\.?g\.?)\b/i;
+  var INFANT_CLASSES = new RegExp('^(?:'
+    + 'nursery|prep|play\\s*group'
+    + '|pre[-\\s]?(?:nursery|primary|school|k\\.?g\\.?)'
+    + '|[lu]?\\.?k\\.?g\\.?'
+    + '|p\\.?\\s?g\\.?'                 // P.G - the class below nursery
+    + ')', 'i');
 
   function looksLikeClass(value) {
     if (!value || value.length > 20) return false;

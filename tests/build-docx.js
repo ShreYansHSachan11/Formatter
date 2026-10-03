@@ -79,6 +79,10 @@ function report(name, file, xml, result, extra, settingsXml) {
     // 2 lines x 12pt x 1.18 x 1.15 line spacing = 33pt = 660 twips.
     'two-line gap between questions':
       name !== 'spacious' || /w:before="660"/.test(xml),
+    // Two copies of the paper, and a dashed line to cut between them.
+    'the paper twice, with a line to cut along':
+      name !== 'two-up' || ((xml.match(/ACADEMY/g) || []).length === 2
+        && /w:val="dashed"/.test(xml)),
     'page size A4 (11906 x 16838 twips)': /w:w="11906"/.test(xml) && /w:h="16838"/.test(xml),
     'font size 24 half-points (12pt)': /w:sz w:val="24"/.test(xml),
     'complex-script size set': /w:szCs w:val="24"/.test(xml),
@@ -121,6 +125,12 @@ buildOne('english')
   .then(function () {
     // The same paper with two blank lines between the questions to write in.
     return buildOne('spacious', PF.samples.english, { densityId: 'spacious' });
+  })
+  .then(function () {
+    // A nursery paper printed twice on one sheet, to be cut in half.
+    return buildOne('two-up', fs.readFileSync(
+      path.join(ROOT, 'tests', 'fixtures', 'pg-hindi.txt'), 'utf8'),
+      { maxPages: 1, twoUp: true });
   })
   .then(function () {
     if (!extra) return null;

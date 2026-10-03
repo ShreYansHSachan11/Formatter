@@ -19,7 +19,8 @@
 
   function renderBlock(block) {
     if (block.type === 'rule') {
-      return new Array(58).join('—');
+      // A cut line looks like one, so the two copies can be told apart in text.
+      return block.dashed ? new Array(29).join('- ') : new Array(58).join('—');
     }
 
     if (block.type === 'header-row') {

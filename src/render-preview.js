@@ -60,7 +60,7 @@
     var content = PF.compose.contentWidthIn(density);
 
     if (block.type === 'rule') {
-      var rule = el('div', 'pv-rule');
+      var rule = el('div', 'pv-rule' + (block.dashed ? ' pv-cut' : ''));
       styleBlock(rule, block, density, options);
       return rule;
     }

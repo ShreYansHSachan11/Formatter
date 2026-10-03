@@ -427,6 +427,109 @@ CASES.forEach(run);
 })();
 
 /*
+ * Two copies of the paper on one sheet.
+ *
+ * How a paper for the smallest classes is printed: twice on one sheet, cut in
+ * half. Which means the paper has to be there twice, whole, with the cut
+ * halfway down the sheet so both halves are the same size - and the room to
+ * write in has to go, because that is what makes the two fit.
+ */
+(function checkTwoUp() {
+  var source = fs.readFileSync(path.join(__dirname, 'fixtures', 'pg-hindi.txt'), 'utf8');
+  var prepared = PF.normalize.prepare(source);
+  var paper = PF.parser.parse(prepared.lines, {
+    properNouns: {}, acceptedSuggestions: [], fontSizePt: 12
+  });
+
+  function fitAs(twoUp) {
+    return PF.layout.fit(paper, Object.assign({}, OPTIONS,
+      { maxPages: twoUp ? 1 : 2, twoUp: twoUp }));
+  }
+
+  var one = fitAs(false);
+  var two = fitAs(true);
+  var oneText = PF.renderText.render(one);
+  var twoText = PF.renderText.render(two);
+
+  if (two.pageCount !== 1) {
+    fail('two copies on one sheet', 'two copies of a nursery paper should fit one sheet, took '
+      + two.pageCount);
+  }
+
+  // The whole paper, twice: the school, the last question and the marks.
+  [/S\.S\. ACADEMY KOIRAUNA BHADOHI/g, /प्रश्न 5\./g, /\(10\)/g].forEach(function (pattern) {
+    var once = (oneText.match(pattern) || []).length;
+    var twice = (twoText.match(pattern) || []).length;
+    if (twice !== once * 2) {
+      fail('two copies on one sheet', pattern + ' appears ' + twice + ' times, expected '
+        + (once * 2) + ' - the second copy is not the same paper');
+    }
+  });
+
+  if (!/^- (- )+$/m.test(twoText)) {
+    fail('two copies on one sheet', 'there is no line to cut along');
+  }
+
+  // A line with nothing on it but blanks is room to write, and it goes. A line
+  // with a question in it keeps its blanks, whatever they are for.
+  if (/^\s*_+\s*$/m.test(twoText)) {
+    fail('two copies on one sheet', 'a line of nothing but blanks is room to write and '
+      + 'should have been taken out');
+  }
+  if (!/अ _+ ऋ _+/.test(twoText)) {
+    fail('two copies on one sheet', 'the blanks inside a question are part of the question '
+      + 'and must stay');
+  }
+
+  /*
+   * The cut goes halfway down the sheet, not wherever the first copy happens
+   * to end - otherwise a short paper is printed as a strip at the top and a
+   * strip in the middle, and the two halves are different sizes. Measured on a
+   * paper far shorter than half a page, where the two are nowhere near alike.
+   */
+  var SHORT = ['S.S. Academy Koirauna Bhadohi', 'Half yearly examination 2026-27', 'Sub - Hindi',
+    'Time : 2:30\tClass - P.G\tM.M 20',
+    'प्रश्न 1. अ से अः तक लिखो। (10)',
+    'प्रश्न 2. आ अक्षर पर गोला लगाओ। (10)'].join('\n');
+
+  var shortPrepared = PF.normalize.prepare(SHORT);
+  var shortPaper = PF.parser.parse(shortPrepared.lines, {
+    properNouns: {}, acceptedSuggestions: [], fontSizePt: 12
+  });
+  var shortOptions = Object.assign({}, OPTIONS, { maxPages: 1, twoUp: true });
+  var shortFit = PF.layout.fit(shortPaper, shortOptions);
+
+  var cutAt = 0;
+  var seen = 0;
+  shortFit.blocks.forEach(function (block) {
+    // Where the line itself lands, which is after the gap that pushes it down.
+    if (block.type === 'rule' && block.dashed) cutAt = seen + (block.spaceBeforePt || 0);
+    seen += PF.layout.blockHeightPt(block, shortFit.density, shortOptions);
+  });
+  var middle = shortFit.capacityPt / 2;
+  if (Math.abs(cutAt - middle) > middle * 0.1) {
+    fail('two copies on one sheet', 'the cut should fall halfway down the sheet ('
+      + Math.round(middle) + 'pt), it falls at ' + Math.round(cutAt) + 'pt');
+  }
+
+  // The copy is a copy: editing a line must not find two lines answering to it.
+  var keys = {};
+  var duplicated = two.blocks.filter(function (block) {
+    if (!block.key) return false;
+    if (keys[block.key]) return true;
+    keys[block.key] = true;
+    return false;
+  });
+  if (duplicated.length) {
+    fail('two copies on one sheet', duplicated.length + ' line(s) in the second copy carry the '
+      + 'keys of the first, so one edit would be two');
+  }
+
+  console.log('  two copies on one sheet - whole paper twice, cut at the middle, '
+    + 'writing room taken out');
+})();
+
+/*
  * The two-line spacing, end to end.
  *
  * A gap stated in lines has to survive all the way to the writers, and the

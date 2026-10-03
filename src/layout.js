@@ -116,8 +116,65 @@
     return densities.filter(function (d) { return d.id === id; })[0];
   }
 
+  /* ------------------------------------------------- two copies on one sheet
+   *
+   * A paper for the smallest classes is a page and a half of writing room and
+   * half a page of questions, and it is printed two to a sheet and cut in
+   * half. Doing that here means two things.
+   *
+   * The room to write goes. A line with nothing on it but blanks is not a
+   * question - the question above it already says what to write - and it is
+   * the first thing to give up when two papers have to share one sheet.
+   *
+   * And the cut is put halfway down the sheet rather than wherever the first
+   * copy happens to end, so both halves are the same size and a straight cut
+   * through the middle gives two identical papers.
+   */
+  var WRITING_ROOM_RE = /^[\s_.…—–-]*$/;
+  var CUT_BREATH_PT = 10;
+
+  function isWritingRoom(block) {
+    if (block.type === 'rule' || block.type === 'header' || block.type === 'header-row') return false;
+    var text = blockText(block).replace(/[\u0001\u0002\u0003]/g, ' ');
+    return text.trim() !== '' && WRITING_ROOM_RE.test(text);
+  }
+
+  /** The same line again, with nothing that ties it to the one it came from. */
+  function copyOf(block) {
+    var copy = {};
+    Object.keys(block).forEach(function (name) { copy[name] = block[name]; });
+    // A copy is not edited: it is the first one over again, and giving it the
+    // same keys would put two lines in the preview answering to one edit.
+    delete copy.key;
+    delete copy.cellKeys;
+    delete copy.marksKey;
+    return copy;
+  }
+
+  function twoUp(blocks, density, options) {
+    var first = blocks.filter(function (block) { return !isWritingRoom(block); });
+    if (!first.length) return blocks;
+
+    var usablePt = (PF.compose.PAGE.heightIn - density.marginTopIn - density.marginBottomIn)
+      * 72 * SAFETY;
+    var rulePt = options.fontSizePt * 0.45 * density.line;
+    var gap = Math.max(CUT_BREATH_PT,
+      usablePt / 2 - totalHeightPt(first, density, options) - rulePt - CUT_BREATH_PT);
+
+    var cut = {
+      type: 'rule', dashed: true, runs: [{ text: '', bold: false }],
+      indentIn: 0, spaceBeforePt: gap, border: true
+    };
+
+    var second = first.map(copyOf);
+    second[0].spaceBeforePt = CUT_BREATH_PT;
+
+    return first.concat([cut], second);
+  }
+
   function build(paper, density, options, maxPages, auto) {
     var blocks = PF.compose.compose(paper, density, options);
+    if (options.twoUp) blocks = twoUp(blocks, density, options);
     var flow = paginate(blocks, density, options);
     return {
       density: density,

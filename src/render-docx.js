@@ -186,7 +186,10 @@
     return new docx.Paragraph(baseParagraph(block, density, options, {
       children: [new docx.TextRun({ text: '', size: options.fontSizePt * 2 })],
       border: {
-        bottom: { style: docx.BorderStyle.SINGLE, size: 6, space: 1, color: '000000' }
+        // The line to cut along is drawn as a line to cut along.
+        bottom: block.dashed
+          ? { style: docx.BorderStyle.DASHED, size: 4, space: 1, color: '808080' }
+          : { style: docx.BorderStyle.SINGLE, size: 6, space: 1, color: '000000' }
       }
     }));
   }

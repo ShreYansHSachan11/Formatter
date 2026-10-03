@@ -36,6 +36,7 @@
   // The fields that are written with a label in front of them, and so can be
   // told apart by it. The school and the examination are lines, not fields.
   var LABELLED_FIELDS = ['subject', 'time', 'className', 'maxMarks'];
+  var TWO_UP = 'two-up';
 
   var el = {};
 
@@ -192,7 +193,9 @@
       latinFont: el.optLatinFont.value,
       hindiFont: el.optHindiFont.value,
       questionPrefix: el.optPrefix.value,
-      maxPages: parseInt(el.optPages.value, 10) || 2,
+      // "2 copies on 1 page" is one page of paper holding the paper twice.
+      maxPages: el.optPages.value === TWO_UP ? 1 : (parseInt(el.optPages.value, 10) || 2),
+      twoUp: el.optPages.value === TWO_UP,
       densityId: el.optDensity.value,
       noQuestionGap: el.optNoGap.checked && !el.optNoGap.disabled,
       edits: state.edits,
@@ -833,6 +836,10 @@
         + '"Que 1", "Q.1" or "प्रश्न 1" - check the source document.';
       el.statusLine.textContent = 'No questions found';
       el.statusLine.className = 'status warn';
+    } else if (result.overflow && options.twoUp) {
+      el.previewNote.classList.add('warn');
+      el.previewNote.textContent = 'Two copies of this paper need ' + pages + ' pages. '
+        + 'It is too long to print two to a sheet - shorten it, or choose a page count instead.';
     } else if (result.overflow) {
       // Whose fault the extra page is depends on who chose the spacing. Telling
       // someone who asked for a two-line gap that the paper is "at the tightest
@@ -843,6 +850,11 @@
           + 'Shorten a question, or allow ' + pages + ' pages.'
         : 'This paper needs ' + pages + ' pages at "' + result.density.label + '" spacing. '
           + 'Choose Auto to fit it into ' + limit + ', or allow ' + pages + ' pages.';
+    } else if (options.twoUp) {
+      el.previewNote.classList.remove('warn');
+      el.previewNote.textContent = 'Two copies of the paper on one sheet of A4 at '
+        + options.fontSizePt + ' pt - print it and cut along the dashed line. '
+        + 'The room to write in has been taken out to make them fit.';
     } else if (limit < 99) {
       el.previewNote.classList.remove('warn');
       el.previewNote.textContent = 'Fits in ' + pages + ' page' + (pages === 1 ? '' : 's')

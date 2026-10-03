@@ -413,6 +413,26 @@ The estimate is slightly pessimistic on purpose: a paper that spills onto a
 third page is a worse failure than one that comes out a little tighter than it
 needed to be.
 
+### Two copies on one sheet
+
+A paper for the smallest classes is half a page of questions and a page and a
+half of room to write, and it is printed twice on one sheet and cut in half.
+**Fit within → 2 copies on 1 page** does that.
+
+Two things make it work. The room to write goes: a line with nothing on it but
+blanks is not a question — the question above it already says what to write —
+and it is the first thing to give up when two papers have to share a sheet.
+Blanks *inside* a question stay, because `अ __ ऋ __ इ __` is the question.
+
+And the cut is put halfway down the sheet rather than wherever the first copy
+happens to end, so both halves are the same size and one straight cut through
+the middle gives two identical papers. The line to cut along is printed dashed.
+
+The second copy is a copy, not a second paper: it carries none of the first
+one's edit keys, so correcting a line in the preview corrects the line, not one
+of the two printings of it. If the paper is too long for two copies to share a
+sheet, you are told so rather than given two sheets.
+
 ### A spacing you ask for by name
 
 Above that ladder sits **Spacious (2-line gap)**: two blank lines between
@@ -503,6 +523,10 @@ separate faults came from at once.
 
 `tests/fixtures/loose-spacing.txt` is a paper typed with double spaces
 everywhere — the case that used to break the parser. Keep it in the suite.
+
+`tests/fixtures/pg-hindi.txt` is a nursery paper — five short questions, a
+matching column and a line of nothing but blanks — used to check that two
+copies of it fit one sheet with the cut halfway down.
 
 `tests/fixtures/hindi-wrapped.txt` is a class-8 Hindi paper as it was typed,
 broken lines and all: a statement split across two lines, a word list split
